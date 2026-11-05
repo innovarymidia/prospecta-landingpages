@@ -1,57 +1,99 @@
 # Prospecta WA
 
-CRM inicial para prospecção e atendimento por WhatsApp. A aplicação Next.js pode rodar na Vercel; Inngest Cloud processa eventos duráveis sem processo BullMQ ou worker separado. O banco PostgreSQL mantém leads, mensagens e supressões. Upstash Redis é usado para limitar tentativas de login.
+CRM completo para prospecção ativa B2B e atendimento automatizado por WhatsApp. A aplicação roda em Next.js 15 (App Router, React 19) e orquestra filas e eventos duráveis via Inngest Cloud / Dev Server (sem processo worker ou BullMQ). O banco PostgreSQL mantém leads, histórico de mensagens, campanhas e supressões.
 
-## Incluído
+---
 
-- Painel responsivo e tela de login administrativa.
-- Sessão JWT assinada em cookie `HttpOnly`, `Secure` em produção, `SameSite=Strict`, com expiração de 8 horas.
-- Senha validada por bcrypt e armazenada somente como hash em variável secreta.
-- Limite de cinco tentativas de login por IP a cada dez minutos, com Upstash Redis REST; em desenvolvimento local usa um limite em memória.
-- Proteção CSRF por validação de origem, middleware de autenticação, cabeçalhos de segurança e rotas de API protegidas.
-- Webhook Evolution com segredo obrigatório em produção; filtra grupos, mensagens próprias, eventos duplicados e contatos inelegíveis.
-- Regra rígida de respostas: lead deve existir, ter envio inicial confirmado e não estar bloqueado/suprimido, tanto no webhook quanto antes da IA e do envio.
-- Buffer por contato via debounce do Inngest, processamento serial por conversa, tentativas automáticas e controle global de ritmo de envio.
-- Busca empresarial via Outscraper: termos, localização, país, limite, empresas com/sem site, deduplicação por telefone/ID do provedor, frequência de 6h a 30 dias e histórico das execuções.
-- Gemini para respostas com contexto autorizado; Evolution para envio; automação desligada por padrão.
+## Recursos Implementados
 
-## Ainda depende de configuração ou desenvolvimento
+- **Central de Atendimento & Conversas**: Modal deslizante com histórico completo de mensagens no estilo balões de chat (WhatsApp), com data, status de entrega (`Na fila`, `Enviada`, `Entregue`, `Falha`) e campo para respostas manuais.
+- **Gerador de Abordagem Personalizada com IA**: Botão "Gerar abordagem" que usa o Google Gemini (`gemini-2.5-flash`) para redigir a 1ª mensagem contextualizada com o nome, segmento e diferenciais da empresa (com fallback automático se a chave ainda não estiver cadastrada).
+- **Disparo Seguro da 1ª Mensagem**: Leads descobertos entram como `READY` sem enviar mensagens de forma autônoma. O disparo inicial é acionado com revisão e controle humano pelo botão "Abordar".
+- **Gestão de Estágios do Lead**: Seletor para qualificação rápida no funil de vendas (`Pronto para contato`, `Enviado`, `Respondeu`, `Qualificado`, `Reunião marcada`, `Convertido`, `Encerrado`, `Opt-out`, `Bloqueado`).
+- **Lista de Supressão & Bloqueios**: Aba dedicada para visualização de números que solicitaram cancelamento ou foram bloqueados pelo operador, com opção de desbloqueio em um clique.
+- **Autenticação Administrativa & Proteção**:
+  - Sessão JWT stateless via cookie `HttpOnly`, `SameSite=Strict`, `Secure` em produção com expiração de 8 horas.
+  - Senha com hash bcrypt (`admin@prospecta.local` / `admin123456` configurado no `.env` local).
+  - Rate limiting de 5 tentativas por IP / 10 minutos (in-memory local, Upstash Redis em produção).
+  - Proteção CSRF obrigatória por validação de origem (`Origin` header).
+- **Webhook Evolution API com Filtro Anti-Spam Rígido**:
+  - Validação de segredo constante com `timingSafeEqual`.
+  - Ignora grupos (`@g.us`), mensagens de broadcast e mensagens enviadas pelo próprio número (`fromMe`).
+  - **Portão Rígido**: descarta qualquer mensagem de contatos que não sejam leads já cadastrados ou que não possuam envio inicial confirmado (`initialSentAt`).
+  - Detecção nativa de comandos de opt-out ("pare", "sair da lista", etc.), registrando a supressão automaticamente.
+- **Buffer Inbound & Debounce Inngest**: Agrupa mensagens fragmentadas enviadas em sequência pelo cliente antes de acionar a IA (janela configurável via `INBOUND_BUFFER_SECONDS`).
+- **Campanhas de Descoberta Outscraper**:
+  - Busca automatizada de empresas no Google Maps por segmento e localização.
+  - Filtro por presença de site (`any`, `missing`, `present`).
+  - Deduplicação inteligente e importação com status `READY` sem disparo autônomo.
+  - Cron periódico no Inngest com histórico detalhado das execuções.
+- **Testes Automatizados**: Suíte de testes unitários nativa com Node.js (`npm test`), validando normalização de telefones, regras de bloqueio/opt-out e gerador de pitch.
 
-Ainda faltam a interface completa de conversas, integração de calendário, faturamento, autenticação multiusuário e geração automática da primeira abordagem. A busca salva empresas com número de telefone disponível como leads `READY`; ela **não inicia mensagens**. Isso separa a descoberta de empresas do contato comercial.
+---
 
-## Configuração local
+## Como Rodar Localmente
 
-1. Instale Node.js 20+, PostgreSQL e dependências: `npm install`.
-2. Copie `.env.example` para `.env`.
-3. Configure `DATABASE_URL`, `APP_URL`, `ADMIN_EMAIL`, `ADMIN_PASSWORD_HASH`, `AUTH_SECRET`, as chaves REST do Upstash, `OUTSCRAPER_API_KEY`, credenciais da Evolution e `GEMINI_API_KEY`.
-4. Gere um hash bcrypt para a senha administrativa (não use nem compartilhe a senha em chats ou no repositório):
+O ambiente já está pronto e com as dependências instaladas.
 
-   ```powershell
-   node -e "require('bcryptjs').hash(process.argv[1], 12).then(console.log)" "SENHA_FORTE_LOCAL"
-   ```
+### 1. Iniciar o Banco de Dados (PostgreSQL)
+Certifique-se de ter um banco PostgreSQL rodando (local ou na nuvem como Supabase/Neon).
+No arquivo `.env`, aponte a variável `DATABASE_URL`:
+```env
+DATABASE_URL="postgresql://postgres:postgres@localhost:5432/prospecta_wa?schema=public"
+```
 
-   Coloque o hash resultante em `ADMIN_PASSWORD_HASH`. Crie `AUTH_SECRET` com pelo menos 32 caracteres aleatórios.
+Execute a migration para criar as tabelas:
+```bash
+npx prisma db push
+```
 
-5. Em desenvolvimento, inicialize/atualize o banco com `npx prisma db push`. Em produção, aplique as migrations versionadas com `npm run db:migrate`.
-6. Rode `npm run dev` e o servidor local do Inngest em outro terminal (`inngest dev`). Configure `INNGEST_DEV=1` no `.env` durante o desenvolvimento.
-7. Cadastre o endpoint Inngest `/api/inngest` no Inngest Cloud ao publicar. Configure `INNGEST_EVENT_KEY` e `INNGEST_SIGNING_KEY` conforme o ambiente; o serviço usa essas chaves para disparo e validação dos eventos.
-8. Configure o webhook Evolution para `APP_URL/api/webhooks/evolution`, incluindo o cabeçalho `x-webhook-secret` com `EVOLUTION_WEBHOOK_SECRET`, e confirme o formato do evento e da rota de envio na sua versão da Evolution.
+### 2. Iniciar a Aplicação Next.js
+```bash
+npm run dev
+```
+Acesse em: [http://localhost:3000](http://localhost:3000)
 
-## Deploy na Vercel
+**Credenciais padrão locais configuradas no `.env`**:
+- **E-mail**: `admin@prospecta.local`
+- **Senha**: `admin123456`
 
-Importe o diretório para a Vercel e adicione todas as variáveis de `.env.example` nos ambientes de Preview/Production. No Inngest, conecte o repositório ou registre a URL publicada para sincronizar as funções. A Vercel executa a aplicação e o endpoint de funções; não há worker BullMQ dedicado.
+### 3. Iniciar o Inngest Dev Server (Opcional para testar filas localmente)
+Em outro terminal:
+```bash
+npx inngest-cli@latest dev
+```
+O dashboard do Inngest abrirá em [http://localhost:8288](http://localhost:8288) conectado ao seu endpoint Next.js `/api/inngest`.
 
-O rate limit de login em produção falha fechado se `UPSTASH_REDIS_REST_URL` ou `UPSTASH_REDIS_REST_TOKEN` não estiver configurado. As credenciais REST do Upstash são distintas da URL Redis `rediss://`; obtenha-as no painel Upstash. Redis não é necessário para a fila do Inngest.
+---
 
-## Operação e limites
+## Onde Inserir Suas Chaves Externas (`.env`)
 
-- `AUTOMATION_ENABLED=false` mantém o envio e as respostas pausados. Ative apenas após configurar e validar todos os serviços.
-- `INBOUND_BUFFER_SECONDS` define o período de silêncio para juntar mensagens consecutivas do mesmo contato.
-- `SEND_RATE_PER_MINUTE` limita globalmente o início de fluxos de envio; ajuste respeitando limites do canal e volume esperado.
-- O cron do Inngest verifica buscas habilitadas a cada hora e dispara as que venceram seu intervalo. Criar uma busca habilitada também dispara a primeira execução imediatamente.
-- Cada termo pode solicitar até 100 negócios; limite total por execução é 200. O provedor pode cobrar por resultados conforme o plano e os créditos da conta. Verifique [preços atuais do Outscraper](https://outscraper.com/pricing/) antes de habilitar frequências altas.
-- A busca usa a API `/google-maps-search` do Outscraper e segue seu modelo assíncrono com consulta de resultados; veja [documentação da API](https://docs.outscraper.com/endpoints/google-maps-search/). Confira os termos, a política de dados e as regras locais aplicáveis à prospecção antes de ativar campanhas.
-- O webhook requer segredo em produção. Se a sua versão Evolution não permitir cabeçalho personalizado, proteja o webhook num proxy autenticado antes de expô-lo.
-- Tentativas automáticas podem repetir uma chamada externa se a conexão cair depois do envio e antes da confirmação persistida. Revise o comportamento de idempotência da sua versão da Evolution e monitore falhas no Inngest.
-- O usuário administrativo é configurado por variáveis de ambiente; não existe cadastro público nem recuperação de senha nesta versão.
-- O envio comercial depende das políticas vigentes do WhatsApp e das regras aplicáveis aos contatos e à origem dos dados. Respeite opt-out e mantenha listas de supressão.
+O arquivo `.env` já foi criado com segredos criptográficos locais preenchidos. Quando desejar conectar suas ferramentas reais, basta preencher os seguintes campos:
+
+| Serviço | Variáveis no `.env` | Para que serve |
+| :--- | :--- | :--- |
+| **PostgreSQL** | `DATABASE_URL` | Armazenamento de leads, conversas e supressões |
+| **Google Gemini** | `GEMINI_API_KEY` | Respostas inteligentes e geração de abordagens |
+| **Evolution API** | `EVOLUTION_API_URL`, `EVOLUTION_API_KEY`, `EVOLUTION_INSTANCE` | Envio de mensagens no WhatsApp e webhook |
+| **Outscraper** | `OUTSCRAPER_API_KEY` | Busca de empresas no Google Maps |
+| **Upstash Redis** | `UPSTASH_REDIS_REST_URL`, `UPSTASH_REDIS_REST_TOKEN` | Rate limiting em produção |
+| **Ativação** | `AUTOMATION_ENABLED="true"` | Ligue quando quiser ativar os envios pelo WhatsApp |
+
+---
+
+## Testes & Qualidade de Código
+
+Para rodar a suíte de testes unitários:
+```bash
+npm test
+```
+
+Para verificar integridade de tipos:
+```bash
+npx tsc --noEmit
+```
+
+Para gerar build de produção:
+```bash
+npm run build
+```
