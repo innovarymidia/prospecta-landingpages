@@ -1,0 +1,147 @@
+import { inngest } from "./client";
+import { db } from "@/lib/db";
+import { generateReply } from "@/lib/ai";
+import { sendText } from "@/lib/evolution";
+import { importSearchResults, pollSearch, submitSearch } from "@/lib/outscraper";
+import { isLeadBlocked } from "@/lib/safety";
+
+export const processInbound = inngest.createFunction(
+  {
+    id: "prospecta-process-inbound",
+    debounce: { period: `${Math.max(3, Number(process.env.INBOUND_BUFFER_SECONDS || 12))}s`, key: "event.data.leadId", timeout: "60s" },
+    concurrency: { limit: 1, key: "event.data.leadId" },
+    retries: 4,
+  },
+  { event: "prospecta/message.received" },
+  async ({ event, step }) => {
+    const { leadId, messageId } = event.data as { leadId: string; messageId: string };
+    const context = await step.run("load-authorized-conversation", async () => {
+      const lead = await db.lead.findUnique({ where: { id: leadId }, include: { messages: { orderBy: { createdAt: "desc" }, take: 12 } } });
+      if (!lead || isLeadBlocked(lead)) return null;
+      const suppression = await db.suppression.findUnique({ where: { phone: lead.phone } });
+      if (suppression) return null;
+      const latestInbound = lead.messages.find(m => m.direction === "INBOUND");
+      if (!latestInbound || latestInbound.id !== messageId) return null;
+      return { lead: { id: lead.id, name: lead.name, phone: lead.phone, company: lead.company, website: lead.website, notes: lead.notes }, incoming: lead.messages.filter(m => m.direction === "INBOUND").map(m => m.body).reverse() };
+    });
+    if (!context || process.env.AUTOMATION_ENABLED !== "true") return { skipped: true };
+
+    const answer = await step.run("draft-contextual-reply", () => generateReply(context.lead.name, [context.lead.company, context.lead.website, context.lead.notes].filter(Boolean).join(" | "), context.incoming));
+    const message = await step.run("save-reply-draft", async () => {
+      const lead = await db.lead.findUnique({ where: { id: leadId } });
+      if (!lead || isLeadBlocked(lead)) return null;
+      const suppression = await db.suppression.findUnique({ where: { phone: context.lead.phone } });
+      if (suppression) return null;
+      const latest = await db.message.findFirst({ where: { leadId, direction: "INBOUND" }, orderBy: { createdAt: "desc" } });
+      if (!latest || latest.id !== messageId) return null;
+      return db.message.create({ data: { leadId, direction: "OUTBOUND", purpose: "REPLY", status: "QUEUED", body: answer } });
+    });
+    if (!message) return { skipped: true };
+    await step.sendEvent("queue-reply-for-send", { id: `send-${message.id}`, name: "prospecta/message.send", data: { leadId, messageId: message.id } });
+    return { queued: true };
+  }
+);
+
+export const sendOutbound = inngest.createFunction(
+  {
+    id: "prospecta-send-outbound",
+    concurrency: { limit: 1, key: "event.data.leadId" },
+    throttle: { limit: Math.max(1, Number(process.env.SEND_RATE_PER_MINUTE || 8)), period: "1m", burst: 0 },
+    retries: 5,
+  },
+  { event: "prospecta/message.send" },
+  async ({ event, step }) => {
+    const { leadId, messageId } = event.data as { leadId: string; messageId: string };
+    const payload = await step.run("validate-before-send", async () => {
+      const [lead, message] = await Promise.all([db.lead.findUnique({ where: { id: leadId } }), db.message.findUnique({ where: { id: messageId } })]);
+      if (!lead || !message || message.direction !== "OUTBOUND" || message.status === "SENT") return null;
+      if (lead.optOutAt || ["OPTED_OUT", "BLOCKED"].includes(lead.status) || await db.suppression.findUnique({ where: { phone: lead.phone } })) return null;
+      if (message.purpose === "REPLY" && !lead.initialSentAt) return null;
+      if (process.env.AUTOMATION_ENABLED !== "true") return null;
+      return { phone: lead.phone, body: message.body, purpose: message.purpose, status: message.status };
+    });
+    if (!payload) return { skipped: true };
+    const sent = await step.run("send-through-evolution", () => sendText(payload.phone, payload.body));
+    await step.run("record-confirmed-send", async () => {
+      const lead = await db.lead.findUnique({ where: { id: leadId } });
+      if (!lead || lead.optOutAt || ["OPTED_OUT", "BLOCKED"].includes(lead.status)) return;
+      await db.$transaction([
+        db.message.update({ where: { id: messageId }, data: { status: "SENT", externalId: sent.key?.id } }),
+        db.lead.update({ where: { id: leadId }, data: { initialSentAt: payload.purpose === "INITIAL" ? (lead.initialSentAt || new Date()) : lead.initialSentAt, lastMessageAt: new Date(), status: payload.purpose === "INITIAL" && lead.status === "READY" ? "SENT" : lead.status } }),
+      ]);
+    });
+    return { sent: true };
+  }
+);
+
+export const queueDueSearches = inngest.createFunction(
+  { id: "prospecta-schedule-searches", retries: 2 },
+  { cron: "15 * * * *" },
+  async ({ step }) => {
+    const due = await step.run("find-due-search-campaigns", async () => {
+      const campaigns = await db.campaign.findMany({ where: { enabled: true }, take: 100, orderBy: { updatedAt: "asc" } });
+      const now = Date.now();
+      return campaigns.filter(c => c.searchTerms.length > 0 && c.location.trim() && !["QUEUED", "RUNNING"].includes(c.lastSearchStatus || "") && (!c.lastSearchedAt || now - c.lastSearchedAt.getTime() >= c.intervalHours * 60 * 60 * 1000) && (!c.lastSearchRequestedAt || now - c.lastSearchRequestedAt.getTime() >= 5 * 60 * 1000)).map(c => ({ id: c.id }));
+    });
+    for (const campaign of due) {
+      const hourSlot = Math.floor(Date.now() / 3_600_000);
+      const claimed = await step.run(`claim-${campaign.id}`, async () => db.campaign.updateMany({ where: { id: campaign.id, enabled: true, OR: [{ lastSearchRequestedAt: null }, { lastSearchRequestedAt: { lt: new Date(Date.now() - 5 * 60 * 1000) } }] }, data: { lastSearchRequestedAt: new Date(), lastSearchStatus: "QUEUED", lastSearchError: null } }));
+      if (claimed.count) await step.sendEvent(`schedule-${campaign.id}`, { id: `search-${campaign.id}-${hourSlot}`, name: "prospecta/search.requested", data: { campaignId: campaign.id, force: false } });
+    }
+    return { queued: due.length };
+  }
+);
+
+export const searchCampaign = inngest.createFunction(
+  {
+    id: "prospecta-search-companies",
+    concurrency: { limit: 1, key: "event.data.campaignId" },
+    throttle: { limit: 1, period: "5m", key: "event.data.campaignId" },
+    retries: 3,
+  },
+  { event: "prospecta/search.requested" },
+  async ({ event, step, attempt }) => {
+    const { campaignId, force } = event.data as { campaignId: string; force?: boolean };
+    const run = await step.run("start-search-run", async () => {
+      const campaign = await db.campaign.findUnique({ where: { id: campaignId } });
+      if (!campaign) return null;
+      if (!campaign.enabled && !force) { await db.campaign.update({ where: { id: campaignId }, data: { lastSearchStatus: "PAUSED" } }); return null; }
+      const searchRun = await db.searchRun.create({ data: { campaignId, status: "RUNNING", termsCount: campaign.searchTerms.length } });
+      await db.campaign.update({ where: { id: campaignId }, data: { lastSearchStatus: "RUNNING", lastSearchError: null } });
+      return { runId: searchRun.id, campaign: { searchTerms: campaign.searchTerms, location: campaign.location, regionCode: campaign.regionCode, language: campaign.language, maxResults: campaign.maxResults, websiteTarget: campaign.websiteTarget } };
+    });
+    if (!run) return { skipped: true };
+    try {
+      if (!process.env.OUTSCRAPER_API_KEY) throw new Error("OUTSCRAPER_API_KEY não configurada");
+      const submitted = await step.run("submit-outscreener-task", () => submitSearch(run.campaign));
+      if (submitted.failure) throw new Error("Outscraper recusou a solicitação de busca");
+      let ready = submitted.ready;
+      for (let poll = 0; !ready && poll < 24; poll++) {
+        await step.sleep(`wait-outscreener-${attempt}-${poll}`, "20s");
+        const state = await step.run(`poll-outscreener-${attempt}-${poll}`, () => pollSearch(submitted.taskId));
+        if (state.failure) throw new Error("Outscraper terminou a busca com falha");
+        ready = state.ready;
+      }
+      if (!ready) throw new Error("Outscraper excedeu o tempo de espera de 8 minutos");
+      const imported = await step.run("import-search-results", () => importSearchResults(submitted.taskId, campaignId));
+      await step.run("finish-search-run", async () => {
+        await db.$transaction([
+          db.searchRun.update({ where: { id: run.runId }, data: { status: "SUCCESS", found: imported.found, added: imported.added, finishedAt: new Date() } }),
+          db.campaign.update({ where: { id: campaignId }, data: { lastSearchedAt: new Date(), lastSearchStatus: "SUCCESS", lastSearchCount: imported.found, lastSearchAdded: imported.added, lastSearchError: null } }),
+        ]);
+      });
+      return { ...imported, status: "SUCCESS" };
+    } catch (error) {
+      const message = (error instanceof Error ? error.message : "Falha desconhecida").slice(0, 300);
+      await step.run("record-search-failure", async () => {
+        await db.$transaction([
+          db.searchRun.update({ where: { id: run.runId }, data: { status: "FAILED", error: message, finishedAt: new Date() } }),
+          db.campaign.update({ where: { id: campaignId }, data: { lastSearchStatus: "FAILED", lastSearchError: message } }),
+        ]);
+      });
+      throw error;
+    }
+  }
+);
+
+export const functions = [processInbound, sendOutbound, queueDueSearches, searchCampaign];

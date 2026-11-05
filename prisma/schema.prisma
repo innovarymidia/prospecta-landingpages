@@ -1,0 +1,115 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum LeadStatus {
+  NEW
+  READY
+  SENT
+  REPLIED
+  QUALIFIED
+  MEETING
+  WON
+  LOST
+  OPTED_OUT
+  BLOCKED
+}
+
+enum MessageDirection {
+  INBOUND
+  OUTBOUND
+}
+
+enum MessageStatus {
+  QUEUED
+  SENT
+  DELIVERED
+  FAILED
+}
+
+enum MessagePurpose {
+  INITIAL
+  REPLY
+}
+
+model Lead {
+  id String @id @default(cuid())
+  name String
+  phone String @unique
+  company String?
+  website String?
+  address String?
+  category String?
+  providerId String? @unique
+  source String?
+  notes String?
+  status LeadStatus @default(NEW)
+  initialSentAt DateTime?
+  lastMessageAt DateTime?
+  optOutAt DateTime?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  messages Message[]
+  @@index([status, createdAt])
+}
+
+model Message {
+  id String @id @default(cuid())
+  leadId String
+  lead Lead @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  direction MessageDirection
+  purpose MessagePurpose?
+  status MessageStatus @default(QUEUED)
+  body String
+  externalId String? @unique
+  createdAt DateTime @default(now())
+  @@index([leadId, createdAt])
+}
+
+model Campaign {
+  id String @id @default(cuid())
+  name String
+  enabled Boolean @default(false)
+  criteria String?
+  searchTerms String[] @default([])
+  location String @default("")
+  regionCode String?
+  language String @default("pt")
+  maxResults Int @default(25)
+  websiteTarget String @default("any")
+  intervalHours Int @default(24)
+  lastSearchedAt DateTime?
+  lastSearchRequestedAt DateTime?
+  lastSearchStatus String?
+  lastSearchCount Int @default(0)
+  lastSearchAdded Int @default(0)
+  lastSearchError String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  searchRuns SearchRun[]
+}
+
+model SearchRun {
+  id String @id @default(cuid())
+  campaignId String
+  campaign Campaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  status String @default("RUNNING")
+  termsCount Int @default(0)
+  found Int @default(0)
+  added Int @default(0)
+  error String?
+  startedAt DateTime @default(now())
+  finishedAt DateTime?
+  @@index([campaignId, startedAt])
+}
+
+model Suppression {
+  phone String @id
+  reason String
+  createdAt DateTime @default(now())
+}
