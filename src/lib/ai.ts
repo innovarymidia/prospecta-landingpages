@@ -18,7 +18,7 @@ export function buildFallbackApproach(lead: LeadForPitch): string {
 }
 
 export async function generateInitialApproach(lead: LeadForPitch): Promise<string> {
-  const apiKey = process.env.GEMINI_API_KEY;
+  const apiKey = process.env.GEMINI_API_KEY || process.env.GEMINI_WHATSAPP_API_KEY;
   if (!apiKey) {
     return buildFallbackApproach(lead);
   }
@@ -60,8 +60,9 @@ Instruções:
 }
 
 export async function generateReply(name: string, context: string, messages: string[]) {
-  if (!process.env.GEMINI_API_KEY) throw new Error("GEMINI_API_KEY não configurada");
-  const model = new GoogleGenerativeAI(process.env.GEMINI_API_KEY).getGenerativeModel({
+  const apiKey = process.env.GEMINI_API_KEY || process.env.GEMINI_WHATSAPP_API_KEY;
+  if (!apiKey) throw new Error("GEMINI_API_KEY não configurada");
+  const model = new GoogleGenerativeAI(apiKey).getGenerativeModel({
     model: process.env.GEMINI_MODEL || "gemini-2.5-flash",
   });
   const result = await model.generateContent(
