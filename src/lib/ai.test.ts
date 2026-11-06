@@ -13,3 +13,4 @@ test("buildFallbackApproach crafts a customized respectful pitch", () => {
   assert.ok(pitch.includes("Ferreira Advocacia"), "Deve conter o nome da empresa");
   assert.ok(pitch.includes("trocarmos uma ideia rápida?"), "Deve conter CTA cordial");
 });
+

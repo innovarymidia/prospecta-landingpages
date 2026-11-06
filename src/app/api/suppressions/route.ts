@@ -40,3 +40,4 @@ export async function POST(req: NextRequest) {
 
   return NextResponse.json(suppression, { status: 201 });
 }
+
