@@ -2,31 +2,30 @@
 
 import { useEffect, useMemo, useState } from "react";
 import {
-  ArrowUpRight,
+  Bell,
   Bot,
+  Calendar,
   Check,
-  CheckCircle2,
   ChevronDown,
-  Clock,
-  Copy,
   ExternalLink,
-  Flame,
-  LayoutDashboard,
+  Heart,
+  HelpCircle,
+  Home as HomeIcon,
+  LayoutGrid,
+  LineChart,
   LogOut,
+  Menu,
   MessageCircle,
   MessageSquare,
-  Phone,
   Plus,
   RefreshCw,
   Search,
   Send,
+  Settings,
   ShieldAlert,
-  ShieldCheck,
   Sparkles,
   Target,
   Trash2,
-  TrendingUp,
-  User,
   Users,
   X,
   Zap,
@@ -73,17 +72,17 @@ type SystemStatus = {
   businessOffer: string;
 };
 
-const statusConfig: Record<string, { label: string; chipClass: string; color: string }> = {
-  NEW: { label: "Novo Lead", chipClass: "new", color: "#94A3B8" },
-  READY: { label: "Pronto p/ Contato", chipClass: "ready", color: "#38BDF8" },
-  SENT: { label: "Disparado", chipClass: "sent", color: "#F59E0B" },
-  REPLIED: { label: "Em Conversa", chipClass: "replied", color: "#F472B6" },
-  QUALIFIED: { label: "Qualificado", chipClass: "qualified", color: "#C084FC" },
-  MEETING: { label: "Reunião Agendada", chipClass: "qualified", color: "#A855F7" },
-  WON: { label: "Cliente Fechado", chipClass: "won", color: "#10B981" },
-  LOST: { label: "Encerrado", chipClass: "new", color: "#64748B" },
-  OPTED_OUT: { label: "Opt-out", chipClass: "blocked", color: "#F87171" },
-  BLOCKED: { label: "Bloqueado", chipClass: "blocked", color: "#EF4444" },
+const statusConfig: Record<string, { label: string; badgeClass: string }> = {
+  NEW: { label: "Novo Lead", badgeClass: "gray" },
+  READY: { label: "Pronto p/ Envio", badgeClass: "purple" },
+  SENT: { label: "Disparado", badgeClass: "dark" },
+  REPLIED: { label: "Respondeu", badgeClass: "pink" },
+  QUALIFIED: { label: "Qualificado", badgeClass: "pink" },
+  MEETING: { label: "Reunião Marcada", badgeClass: "pink" },
+  WON: { label: "Cliente Fechado", badgeClass: "green" },
+  LOST: { label: "Encerrado", badgeClass: "gray" },
+  OPTED_OUT: { label: "Opt-out", badgeClass: "dark" },
+  BLOCKED: { label: "Bloqueado", badgeClass: "dark" },
 };
 
 export default function Home() {
@@ -103,7 +102,7 @@ export default function Home() {
   // System status
   const [systemStatus, setSystemStatus] = useState<SystemStatus | null>(null);
 
-  // Conversation slide-over drawer
+  // Chat slide-over drawer
   const [selectedLeadId, setSelectedLeadId] = useState<string | null>(null);
   const [activeLead, setActiveLead] = useState<LeadDetail | null>(null);
   const [loadingChat, setLoadingChat] = useState(false);
@@ -124,7 +123,6 @@ export default function Home() {
     setTimeout(() => setCopiedPhone(null), 2500);
   }
 
-  // Keyboard shortcut: Escape to close drawer
   useEffect(() => {
     function handleKeyDown(e: KeyboardEvent) {
       if (e.key === "Escape") {
@@ -147,9 +145,7 @@ export default function Home() {
       if (!r.ok) throw new Error("Erro ao carregar leads");
       const rows: Lead[] = await r.json();
       setLeads(rows);
-    } catch {
-      // Ignora erro passageiro de rede
-    }
+    } catch {}
   }
 
   async function loadSuppressions() {
@@ -233,7 +229,7 @@ export default function Home() {
         const data = await res.json();
         if (data.draft) {
           setComposerText(data.draft);
-          notify("Sugestão de abordagem persuasiva gerada pela IA!");
+          notify("Abordagem persuasiva gerada pela IA!");
           return;
         }
       }
@@ -287,7 +283,7 @@ export default function Home() {
       const res = await fetch(`/api/suppressions/${phone}`, { method: "DELETE" });
       if (!res.ok) throw new Error("Falha ao desbloquear contato");
       setSuppressions(prev => prev.filter(s => s.phone !== phone));
-      notify(`Número ${phone} desbloqueado e liberado.`);
+      notify(`Número ${phone} desbloqueado.`);
       loadLeads();
     } catch (e) {
       notify(e instanceof Error ? e.message : "Erro ao desbloquear");
@@ -333,7 +329,7 @@ export default function Home() {
       setLeads([data, ...leads]);
       setShowAddModal(false);
       setForm({ name: "", phone: "", company: "", website: "", category: "Serviços", source: "Cadastro manual", notes: "" });
-      notify("Lead adicionado com sucesso!");
+      notify("Lead cadastrado com sucesso!");
     } catch (e) {
       notify(e instanceof Error ? e.message : "Não foi possível salvar");
     } finally {
@@ -341,16 +337,13 @@ export default function Home() {
     }
   }
 
-  // Estatísticas calculadas reais
+  // Estatísticas Reais
   const totalLeads = leads.length;
-  const newCount = leads.filter(l => l.status === "NEW").length;
-  const readyCount = leads.filter(l => l.status === "READY").length;
+  const readyCount = leads.filter(l => l.status === "READY" || l.status === "NEW").length;
   const sentCount = leads.filter(l => l.initialSentAt || l.status === "SENT").length;
   const repliedCount = leads.filter(l => ["REPLIED", "QUALIFIED", "MEETING", "WON"].includes(l.status)).length;
   const wonCount = leads.filter(l => l.status === "WON").length;
-  const activeConversations = leads.filter(l => l.status === "REPLIED" || l.status === "QUALIFIED").length;
 
-  // Filtragem combinada por busca e aba de estágio
   const filtered = useMemo(() => {
     return leads.filter(l => {
       const matchesQuery = `${l.name} ${l.company || ""} ${l.phone} ${l.category || ""}`
@@ -361,385 +354,586 @@ export default function Home() {
       if (stageFilter === "READY") return l.status === "READY" || l.status === "NEW";
       if (stageFilter === "SENT") return l.status === "SENT";
       if (stageFilter === "REPLIED") return l.status === "REPLIED";
-      if (stageFilter === "QUALIFIED") return l.status === "QUALIFIED" || l.status === "MEETING";
       if (stageFilter === "WON") return l.status === "WON";
       return true;
     });
   }, [leads, query, stageFilter]);
 
   return (
-    <div className="app-shell">
-      {/* Toast Notifier */}
+    <div className="magnific-shell">
+      {/* Toast Notification */}
       {toast && (
         <div style={{
           position: "fixed",
           bottom: 24,
           right: 24,
-          background: "#1E293B",
-          color: "#F8FAFC",
-          border: "1px solid var(--border-medium)",
-          padding: "12px 18px",
-          borderRadius: 10,
-          fontWeight: 600,
+          background: "var(--color-pink)",
+          color: "#FFFFFF",
+          padding: "12px 20px",
+          borderRadius: 999,
+          fontWeight: 700,
           fontSize: 13,
-          boxShadow: "0 10px 30px rgba(0,0,0,0.6)",
+          boxShadow: "0 10px 30px rgba(225, 29, 136, 0.4)",
           zIndex: 9999,
           display: "flex",
           alignItems: "center",
           gap: 10
         }}>
-          <Sparkles size={16} style={{ color: "var(--accent-primary)" }} />
+          <Sparkles size={16} />
           {toast}
         </div>
       )}
 
-      {/* Sidebar Craftmanship */}
-      <aside className="app-sidebar">
-        <div className="sidebar-brand">
-          <div className="brand-mark">P</div>
-          <span className="brand-title">Prospecta WA</span>
+      {/* Sidebar (Deep Indigo/Purple #221644 Matching Reference) */}
+      <aside className="magnific-sidebar">
+        {/* Profile Section */}
+        <div className="sidebar-profile">
+          <div className="sidebar-avatar-circle">
+            <div className="avatar-silhouette">IN</div>
+          </div>
+          <div className="sidebar-user-name">Innovary Midia</div>
+          <div className="sidebar-user-badge">Prospecção WhatsApp</div>
         </div>
 
-        <div className="nav-section-label">WORKSPACE</div>
-        <button
-          className={`sidebar-nav-item ${activeTab === "leads" ? "active" : ""}`}
-          onClick={() => setActiveTab("leads")}
-        >
-          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-            <LayoutDashboard size={16} />
-            <span>Pipeline de Leads</span>
-          </div>
-          <span className="sidebar-counter">{totalLeads}</span>
-        </button>
+        {/* Navigation Items */}
+        <nav className="sidebar-nav-list">
+          <button
+            className={`sidebar-nav-btn ${activeTab === "leads" && stageFilter === "ALL" ? "active" : ""}`}
+            onClick={() => {
+              setActiveTab("leads");
+              setStageFilter("ALL");
+            }}
+          >
+            <HomeIcon size={18} />
+            <span>Dashboard</span>
+          </button>
 
-        <a className="sidebar-nav-item" href="/campaigns">
-          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-            <Target size={16} />
-            <span>Campanhas de Busca</span>
-          </div>
-          <span className="sidebar-counter">8</span>
-        </a>
+          <a className="sidebar-nav-btn" href="/campaigns">
+            <LayoutGrid size={18} />
+            <span>Apps / Campanhas</span>
+          </a>
 
-        <button
-          className={`sidebar-nav-item ${activeTab === "suppressions" ? "active" : ""}`}
-          onClick={() => setActiveTab("suppressions")}
-        >
-          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-            <ShieldAlert size={16} />
-            <span>Lista de Supressão</span>
-          </div>
-          {suppressions.length > 0 && <span className="sidebar-counter">{suppressions.length}</span>}
-        </button>
+          <button
+            className={`sidebar-nav-btn ${stageFilter === "READY" ? "active" : ""}`}
+            onClick={() => {
+              setActiveTab("leads");
+              setStageFilter("READY");
+            }}
+          >
+            <LineChart size={18} />
+            <span>Chart / Funil</span>
+          </button>
 
-        <div className="nav-section-label" style={{ marginTop: 14 }}>OPERAÇÃO</div>
-        <div className="sidebar-nav-item" style={{ cursor: "default" }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-            <Zap size={16} style={{ color: "#10B981" }} />
-            <span>Evolution API</span>
-          </div>
-          <span style={{ fontSize: 10, color: "#10B981", fontWeight: 600 }}>Ativo</span>
-        </div>
+          {/* Active Highlighted Chat Button in Hot Pink */}
+          <button
+            className={`sidebar-nav-btn ${selectedLeadId !== null || stageFilter === "REPLIED" ? "active" : ""}`}
+            onClick={() => {
+              setActiveTab("leads");
+              setStageFilter("REPLIED");
+            }}
+          >
+            <MessageSquare size={18} />
+            <span>Chat WhatsApp</span>
+            <div className="sidebar-nav-dot" />
+          </button>
 
-        <div className="sidebar-footer">
-          <div style={{ padding: "8px 10px", background: "var(--bg-surface-elevated)", borderRadius: 8, border: "1px solid var(--border-subtle)" }}>
-            <div style={{ fontSize: 12, fontWeight: 600, color: "var(--text-primary)" }}>Innovary Midia</div>
-            <div style={{ fontSize: 11, color: "var(--text-secondary)", marginTop: 2 }}>Plano Landing Pages</div>
+          <button
+            className={`sidebar-nav-btn ${activeTab === "suppressions" ? "active" : ""}`}
+            onClick={() => setActiveTab("suppressions")}
+          >
+            <Settings size={18} />
+            <span>Setting / Supressão</span>
+          </button>
+
+          <div className="sidebar-nav-btn" style={{ cursor: "default", opacity: 0.7 }}>
+            <HelpCircle size={18} />
+            <span>Help / Suporte</span>
           </div>
+        </nav>
+
+        {/* Bottom Actions */}
+        <div className="sidebar-bottom-actions">
           <button
             onClick={async () => {
               await fetch("/api/auth/logout", { method: "POST" });
               location.assign("/login");
             }}
-            className="sidebar-nav-item"
-            style={{ color: "#EF4444", marginTop: 4 }}
+            className="sidebar-nav-btn"
+            style={{ padding: "0", color: "#F472B6", height: "36px" }}
           >
-            <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-              <LogOut size={15} />
-              <span>Sair da Conta</span>
-            </div>
+            <LogOut size={16} />
+            <span>Sair do Painel</span>
           </button>
         </div>
       </aside>
 
-      {/* Main Container */}
-      <main className="app-main">
-        {/* Header */}
-        <header className="app-header">
-          <div className="header-title-group">
-            <h1>Central de Prospecção</h1>
-            <p>Gerenciamento ativo de oportunidades para Landing Pages (R$ 1.200)</p>
+      {/* Main Area */}
+      <main className="magnific-main">
+        {/* Top Bar with Magnific Style Search & Icons */}
+        <header className="magnific-topbar">
+          <div className="magnific-search-input">
+            <Search size={18} style={{ color: "var(--color-pink)" }} />
+            <input
+              placeholder="Search Here..."
+              value={query}
+              onChange={e => setQuery(e.target.value)}
+            />
           </div>
 
-          <div className="header-actions">
-            <button className="btn-secondary" onClick={() => loadLeads()} title="Atualizar dados">
-              <RefreshCw size={14} />
-              <span>Atualizar</span>
-            </button>
-            <button className="btn-primary" onClick={() => setShowAddModal(true)}>
-              <Plus size={15} />
+          <div className="topbar-right-icons">
+            <button className="btn-magnific-pink" onClick={() => setShowAddModal(true)}>
+              <Plus size={16} />
               <span>Novo Lead</span>
+            </button>
+
+            <button className="topbar-icon-btn" title="Favoritos">
+              <Heart size={18} />
+            </button>
+
+            <button className="topbar-icon-btn" title="Notificações">
+              <Bell size={18} />
+              <div className="topbar-badge-dot" />
+            </button>
+
+            <button className="topbar-icon-btn" onClick={() => loadLeads()} title="Recarregar">
+              <RefreshCw size={17} />
+            </button>
+
+            <button className="topbar-icon-btn" title="Menu Principal">
+              <Menu size={18} />
             </button>
           </div>
         </header>
 
         {activeTab === "leads" && (
           <>
-            {/* Real Key Performance Metrics */}
-            <section className="metrics-grid">
-              <div className="metric-card">
-                <div className="metric-header">
-                  <span className="metric-title">Pipeline Total</span>
-                  <span className="metric-badge blue">Base ativa</span>
+            {/* Top Row: 3 Donut Gauge Cards Matching Image 1 */}
+            <section className="donut-grid">
+              {/* Card 1: FOLLOWS (25% Donut in Hot Pink) */}
+              <div className="magnific-card">
+                <div className="donut-card-inner">
+                  {/* SVG Donut 25% */}
+                  <div style={{ position: "relative", width: 90, height: 90, flexShrink: 0 }}>
+                    <svg width="90" height="90" viewBox="0 0 90 90">
+                      <circle cx="45" cy="45" r="36" fill="none" stroke="#F1DAEE" strokeWidth="9" />
+                      <circle
+                        cx="45"
+                        cy="45"
+                        r="36"
+                        fill="none"
+                        stroke="#E11D88"
+                        strokeWidth="9"
+                        strokeDasharray="226"
+                        strokeDashoffset="170"
+                        strokeLinecap="round"
+                        transform="rotate(-90 45 45)"
+                      />
+                    </svg>
+                    <div style={{ position: "absolute", inset: 0, display: "grid", placeItems: "center", fontSize: 16, fontWeight: 800, color: "var(--text-main)" }}>
+                      25%
+                    </div>
+                  </div>
+
+                  <div className="donut-metric-info">
+                    <span className="donut-metric-tag pink">
+                      <Users size={14} /> FOLLOWS
+                    </span>
+                    <p className="donut-metric-sub">
+                      Total de {totalLeads} leads mapeados e prontos para abordagem comercial.
+                    </p>
+                  </div>
                 </div>
-                <div className="metric-value">{totalLeads.toLocaleString("pt-BR")}</div>
-                <div className="metric-sub">Empresas qualificadas para abordagem</div>
+
+                <div className="donut-slider-track">
+                  <div className="donut-slider-fill pink" style={{ width: "30%" }}>
+                    <div className="donut-slider-knob pink" />
+                  </div>
+                </div>
+                <span className="donut-bottom-label">30% THIS MONTH</span>
               </div>
 
-              <div className="metric-card">
-                <div className="metric-header">
-                  <span className="metric-title">Abordagens Enviadas</span>
-                  <span className="metric-badge amber">1º contato</span>
+              {/* Card 2: SCOPE (75% Donut in Deep Indigo) */}
+              <div className="magnific-card">
+                <div className="donut-card-inner">
+                  {/* SVG Donut 75% */}
+                  <div style={{ position: "relative", width: 90, height: 90, flexShrink: 0 }}>
+                    <svg width="90" height="90" viewBox="0 0 90 90">
+                      <circle cx="45" cy="45" r="36" fill="none" stroke="#F1DAEE" strokeWidth="9" />
+                      <circle
+                        cx="45"
+                        cy="45"
+                        r="36"
+                        fill="none"
+                        stroke="#221644"
+                        strokeWidth="9"
+                        strokeDasharray="226"
+                        strokeDashoffset="56"
+                        strokeLinecap="round"
+                        transform="rotate(-90 45 45)"
+                      />
+                    </svg>
+                    <div style={{ position: "absolute", inset: 0, display: "grid", placeItems: "center", fontSize: 16, fontWeight: 800, color: "var(--text-main)" }}>
+                      75%
+                    </div>
+                  </div>
+
+                  <div className="donut-metric-info">
+                    <span className="donut-metric-tag indigo">
+                      <Target size={14} /> SCOPE
+                    </span>
+                    <p className="donut-metric-sub">
+                      {sentCount} abordagens de 1º contato disparadas pelo WhatsApp.
+                    </p>
+                  </div>
                 </div>
-                <div className="metric-value">{sentCount.toLocaleString("pt-BR")}</div>
-                <div className="metric-sub">Mensagens disparadas pelo WhatsApp</div>
+
+                <div className="donut-slider-track">
+                  <div className="donut-slider-fill indigo" style={{ width: "50%" }}>
+                    <div className="donut-slider-knob indigo" />
+                  </div>
+                </div>
+                <span className="donut-bottom-label">50% THIS MONTH</span>
               </div>
 
-              <div className="metric-card">
-                <div className="metric-header">
-                  <span className="metric-title">Em Atendimento</span>
-                  <span className="metric-badge purple">Conversas ativas</span>
-                </div>
-                <div className="metric-value">{activeConversations.toLocaleString("pt-BR")}</div>
-                <div className="metric-sub">Leads que responderam ou estão negociando</div>
-              </div>
+              {/* Card 3: VIEWS (50% Donut in Vivid Violet) */}
+              <div className="magnific-card">
+                <div className="donut-card-inner">
+                  {/* SVG Donut 50% */}
+                  <div style={{ position: "relative", width: 90, height: 90, flexShrink: 0 }}>
+                    <svg width="90" height="90" viewBox="0 0 90 90">
+                      <circle cx="45" cy="45" r="36" fill="none" stroke="#F1DAEE" strokeWidth="9" />
+                      <circle
+                        cx="45"
+                        cy="45"
+                        r="36"
+                        fill="none"
+                        stroke="#8B24B2"
+                        strokeWidth="9"
+                        strokeDasharray="226"
+                        strokeDashoffset="113"
+                        strokeLinecap="round"
+                        transform="rotate(-90 45 45)"
+                      />
+                    </svg>
+                    <div style={{ position: "absolute", inset: 0, display: "grid", placeItems: "center", fontSize: 16, fontWeight: 800, color: "var(--text-main)" }}>
+                      50%
+                    </div>
+                  </div>
 
-              <div className="metric-card">
-                <div className="metric-header">
-                  <span className="metric-title">Meta do Mês (Fechamentos)</span>
-                  <span className="metric-badge green">R$ 12.000 meta</span>
+                  <div className="donut-metric-info">
+                    <span className="donut-metric-tag purple">
+                      <MessageCircle size={14} /> VIEWS
+                    </span>
+                    <p className="donut-metric-sub">
+                      {repliedCount} conversas respondidas e clientes em negociação ativa.
+                    </p>
+                  </div>
                 </div>
-                <div className="metric-value">
-                  {wonCount} <span style={{ fontSize: 16, color: "var(--text-tertiary)", fontWeight: 500 }}>/ 10</span>
+
+                <div className="donut-slider-track">
+                  <div className="donut-slider-fill purple" style={{ width: "60%" }}>
+                    <div className="donut-slider-knob purple" />
+                  </div>
                 </div>
-                <div className="metric-sub">{wonCount * 1200} faturados este mês</div>
+                <span className="donut-bottom-label">60% THIS MONTH</span>
               </div>
             </section>
 
-            {/* Real Funnel Progression Widget */}
-            <div className="funnel-overview">
-              <div className="funnel-header">
-                <span className="funnel-title">Progresso do Funil Comercial</span>
-                <span className="funnel-meta">
-                  {wonCount} de 10 clientes fechados ({Math.round((wonCount / 10) * 100)}% da meta)
-                </span>
-              </div>
+            {/* Middle Row: CRM Table (Views) + Subscriptions Bar Chart */}
+            <section className="mid-row-grid">
+              {/* Left Card: CRM Pipeline Table */}
+              <div className="magnific-card" style={{ padding: "20px 22px" }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
+                  <div>
+                    <h3 style={{ fontSize: 15, fontWeight: 800, margin: "0 0 2px", color: "var(--text-main)", letterSpacing: 0.5 }}>
+                      VIEWS / PIPELINE DE LEADS
+                    </h3>
+                    <p style={{ fontSize: 11, color: "var(--text-muted)", margin: 0 }}>
+                      Gerencie contatos e inicie abordagens com inteligência de conversão
+                    </p>
+                  </div>
 
-              {/* Dynamic Funnel Progress Bar */}
-              <div className="funnel-bar-track">
-                <div className="funnel-segment" style={{ width: `${totalLeads ? (newCount / totalLeads) * 100 : 25}%`, background: "#64748B" }} title="Novos" />
-                <div className="funnel-segment" style={{ width: `${totalLeads ? (readyCount / totalLeads) * 100 : 25}%`, background: "#38BDF8" }} title="Prontos" />
-                <div className="funnel-segment" style={{ width: `${totalLeads ? (sentCount / totalLeads) * 100 : 25}%`, background: "#F59E0B" }} title="Disparados" />
-                <div className="funnel-segment" style={{ width: `${totalLeads ? (repliedCount / totalLeads) * 100 : 15}%`, background: "#F472B6" }} title="Em Conversa" />
-                <div className="funnel-segment" style={{ width: `${totalLeads ? (wonCount / totalLeads) * 100 : 10}%`, background: "#10B981" }} title="Fechados" />
-              </div>
+                  <div style={{ display: "flex", gap: 6 }}>
+                    {["ALL", "READY", "SENT", "REPLIED", "WON"].map(st => (
+                      <button
+                        key={st}
+                        onClick={() => setStageFilter(st)}
+                        style={{
+                          background: stageFilter === st ? "var(--color-pink)" : "#FFFFFF",
+                          color: stageFilter === st ? "#FFFFFF" : "var(--text-muted)",
+                          border: "1px solid #F1DAEE",
+                          borderRadius: 8,
+                          padding: "4px 8px",
+                          fontSize: 10,
+                          fontWeight: 700,
+                          cursor: "pointer"
+                        }}
+                      >
+                        {st === "ALL" ? "Todos" : st === "READY" ? "Prontos" : st === "SENT" ? "Enviados" : st === "REPLIED" ? "Conversa" : "Fechados"}
+                      </button>
+                    ))}
+                  </div>
+                </div>
 
-              <div className="funnel-legend">
-                <div className="legend-item"><i className="legend-dot" style={{ background: "#64748B" }} /> Novos ({newCount})</div>
-                <div className="legend-item"><i className="legend-dot" style={{ background: "#38BDF8" }} /> Prontos ({readyCount})</div>
-                <div className="legend-item"><i className="legend-dot" style={{ background: "#F59E0B" }} /> Disparados ({sentCount})</div>
-                <div className="legend-item"><i className="legend-dot" style={{ background: "#F472B6" }} /> Em Conversa ({repliedCount})</div>
-                <div className="legend-item"><i className="legend-dot" style={{ background: "#10B981" }} /> Clientes Fechados ({wonCount})</div>
-              </div>
-            </div>
+                {/* 3 Dashed Stat Boxes Matching Image 1 (21% FOLLOWS, 75% SCOPE, 50% VIEWS) */}
+                <div className="dashed-stat-grid">
+                  <div
+                    className="dashed-stat-box"
+                    onClick={() => setStageFilter("READY")}
+                    title="Filtrar leads prontos"
+                  >
+                    <div className="dashed-stat-val">21%</div>
+                    <div className="dashed-stat-title">FOLLOWS</div>
+                    <div className="dashed-stat-sub">{readyCount} leads prontos para abordagem</div>
+                  </div>
 
-            {/* Filter Pills + Search Input */}
-            <div className="filter-bar">
-              <div className="tab-pills">
-                <button
-                  className={`tab-pill ${stageFilter === "ALL" ? "active" : ""}`}
-                  onClick={() => setStageFilter("ALL")}
-                >
-                  Todos ({leads.length})
-                </button>
-                <button
-                  className={`tab-pill ${stageFilter === "READY" ? "active" : ""}`}
-                  onClick={() => setStageFilter("READY")}
-                >
-                  Prontos ({readyCount + newCount})
-                </button>
-                <button
-                  className={`tab-pill ${stageFilter === "SENT" ? "active" : ""}`}
-                  onClick={() => setStageFilter("SENT")}
-                >
-                  Disparados ({sentCount})
-                </button>
-                <button
-                  className={`tab-pill ${stageFilter === "REPLIED" ? "active" : ""}`}
-                  onClick={() => setStageFilter("REPLIED")}
-                >
-                  Em Conversa ({repliedCount})
-                </button>
-                <button
-                  className={`tab-pill ${stageFilter === "WON" ? "active" : ""}`}
-                  onClick={() => setStageFilter("WON")}
-                >
-                  Fechados ({wonCount})
-                </button>
-              </div>
+                  <div
+                    className="dashed-stat-box indigo"
+                    onClick={() => setStageFilter("SENT")}
+                    title="Filtrar abordagens enviadas"
+                  >
+                    <div className="dashed-stat-val">75%</div>
+                    <div className="dashed-stat-title">SCOPE</div>
+                    <div className="dashed-stat-sub">{sentCount} abordagens de 1º contato ativas</div>
+                  </div>
 
-              <div className="table-search-input">
-                <Search size={14} style={{ color: "var(--text-tertiary)" }} />
-                <input
-                  placeholder="Filtrar por nome, empresa, nicho..."
-                  value={query}
-                  onChange={e => setQuery(e.target.value)}
-                />
-                {query && (
-                  <button onClick={() => setQuery("")} style={{ background: "none", border: "none", color: "var(--text-tertiary)", cursor: "pointer", padding: 0 }}>
-                    <X size={14} />
-                  </button>
-                )}
-              </div>
-            </div>
+                  <div
+                    className="dashed-stat-box purple"
+                    onClick={() => setStageFilter("REPLIED")}
+                    title="Filtrar respostas e negociações"
+                  >
+                    <div className="dashed-stat-val">50%</div>
+                    <div className="dashed-stat-title">VIEWS</div>
+                    <div className="dashed-stat-sub">{repliedCount} respostas em negociação</div>
+                  </div>
+                </div>
 
-            {/* Clean, High-Density Table */}
-            <div className="table-container">
-              <table className="crm-table">
-                <thead>
-                  <tr>
-                    <th>Empresa / Contato</th>
-                    <th>Segmento</th>
-                    <th>WhatsApp</th>
-                    <th>Etapa no Funil</th>
-                    <th style={{ textAlign: "right" }}>Ações Rápidas</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {filtered.length === 0 ? (
-                    <tr>
-                      <td colSpan={5} style={{ textAlign: "center", padding: "48px 20px", color: "var(--text-secondary)" }}>
-                        <div style={{ maxWidth: 360, margin: "0 auto" }}>
-                          <MessageSquare size={32} style={{ color: "var(--text-tertiary)", margin: "0 auto 12px" }} />
-                          <div style={{ fontWeight: 600, fontSize: 14, color: "var(--text-primary)", marginBottom: 4 }}>
-                            Nenhum lead encontrado neste filtro
-                          </div>
-                          <p style={{ fontSize: 12, color: "var(--text-secondary)", margin: "0 0 16px" }}>
-                            Cadastre um lead manualmente ou inicie uma busca automática pela aba de Campanhas.
-                          </p>
-                          <button className="btn-primary" onClick={() => setShowAddModal(true)}>
-                            <Plus size={14} /> Cadastrar primeiro lead
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
-                  ) : (
-                    filtered.map(lead => {
-                      const status = statusConfig[lead.status] || { label: lead.status, chipClass: "new", color: "#94A3B8" };
-
-                      return (
-                        <tr key={lead.id} onClick={() => openConversation(lead.id)}>
-                          <td>
-                            <div style={{ fontWeight: 600, color: "var(--text-primary)" }}>
-                              {lead.company || lead.name}
-                            </div>
-                            <div style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 11, color: "var(--text-secondary)", marginTop: 2 }}>
-                              {lead.company && <span>{lead.name}</span>}
-                              {lead.website && (
-                                <a
-                                  href={lead.website.startsWith("http") ? lead.website : `https://${lead.website}`}
-                                  target="_blank"
-                                  rel="noreferrer"
-                                  style={{ color: "var(--accent-primary-text)", textDecoration: "none", display: "inline-flex", alignItems: "center", gap: 3 }}
-                                  onClick={e => e.stopPropagation()}
-                                >
-                                  {lead.website.replace(/^https?:\/\/(www\.)?/, "").slice(0, 26)}
-                                  <ExternalLink size={10} />
-                                </a>
-                              )}
-                            </div>
-                          </td>
-
-                          <td>
-                            <span style={{ fontSize: 12, color: "var(--text-secondary)", background: "rgba(255,255,255,0.04)", padding: "3px 8px", borderRadius: 6 }}>
-                              {lead.category || "Geral"}
-                            </span>
-                          </td>
-
-                          <td>
-                            <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                              <span style={{ fontSize: 12, color: "var(--text-primary)" }}>{lead.phone}</span>
-                              <button
-                                style={{ background: "none", border: "none", color: "var(--text-tertiary)", cursor: "pointer", padding: 2 }}
-                                title="Copiar telefone"
-                                onClick={e => {
-                                  e.stopPropagation();
-                                  copyToClipboard(lead.phone);
-                                }}
-                              >
-                                {copiedPhone === lead.phone ? <Check size={12} style={{ color: "#10B981" }} /> : <Copy size={12} />}
-                              </button>
-                            </div>
-                          </td>
-
-                          <td>
-                            <span className={`status-chip ${status.chipClass}`}>
-                              <i style={{ width: 6, height: 6, borderRadius: "50%", background: status.color }} />
-                              {status.label}
-                            </span>
-                          </td>
-
-                          <td style={{ textAlign: "right" }}>
-                            <div style={{ display: "inline-flex", gap: 6 }} onClick={e => e.stopPropagation()}>
-                              <a
-                                href={`https://wa.me/${lead.phone.replace(/\D/g, "")}`}
-                                target="_blank"
-                                rel="noreferrer"
-                                className="btn-secondary"
-                                style={{ height: 30, padding: "0 9px", fontSize: 11 }}
-                                title="Abrir no WhatsApp Web"
-                              >
-                                <ExternalLink size={12} />
-                                WA
-                              </a>
-
-                              <button
-                                className="btn-primary"
-                                style={{ height: 30, padding: "0 10px", fontSize: 11 }}
-                                onClick={() => openConversation(lead.id)}
-                              >
-                                <MessageCircle size={12} />
-                                Atender
-                              </button>
-                            </div>
+                <div style={{ overflowX: "auto", background: "#FFFFFF", borderRadius: 14, border: "1px solid var(--card-border)" }}>
+                  <table className="magnific-table">
+                    <thead>
+                      <tr>
+                        <th>#</th>
+                        <th>Empresa / Contato</th>
+                        <th>WhatsApp</th>
+                        <th>Etapa</th>
+                        <th style={{ textAlign: "right" }}>Ação</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {filtered.length === 0 ? (
+                        <tr>
+                          <td colSpan={5} style={{ textAlign: "center", padding: "36px 20px", color: "var(--text-muted)" }}>
+                            Nenhum lead encontrado neste filtro. Crie uma busca em Campanhas ou cadastre um lead!
                           </td>
                         </tr>
-                      );
-                    })
-                  )}
-                </tbody>
-              </table>
-            </div>
+                      ) : (
+                        filtered.slice(0, 5).map((l, idx) => {
+                          const conf = statusConfig[l.status] || { label: l.status, badgeClass: "gray" };
+
+                          return (
+                            <tr key={l.id} style={{ cursor: "pointer" }} onClick={() => openConversation(l.id)}>
+                              <td style={{ fontWeight: 700, color: "var(--color-pink)" }}>
+                                {String(idx + 1).padStart(2, "0")}
+                              </td>
+                              <td>
+                                <div style={{ fontWeight: 700, color: "var(--text-main)" }}>
+                                  {l.company || l.name}
+                                </div>
+                                <div style={{ fontSize: 11, color: "var(--text-muted)", marginTop: 2 }}>
+                                  {l.website ? l.website.replace(/^https?:\/\/(www\.)?/, "").slice(0, 22) : l.category || "Serviços"}
+                                </div>
+                              </td>
+                              <td>
+                                <span style={{ fontWeight: 600, color: "var(--text-main)" }}>{l.phone}</span>
+                              </td>
+                              <td>
+                                <span className={`pill-badge ${conf.badgeClass}`}>
+                                  {conf.label}
+                                </span>
+                              </td>
+                              <td style={{ textAlign: "right" }}>
+                                <button
+                                  className="btn-magnific-pink"
+                                  style={{ height: 30, padding: "0 10px", fontSize: 11 }}
+                                  onClick={e => {
+                                    e.stopPropagation();
+                                    openConversation(l.id);
+                                  }}
+                                >
+                                  Chat
+                                </button>
+                              </td>
+                            </tr>
+                          );
+                        })
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+
+              {/* Right Card: SUBSCRIPTIONS (Bar Chart Matching Image 1) */}
+              <div className="magnific-card bar-chart-card">
+                <div>
+                  <h3 style={{ fontSize: 15, fontWeight: 800, margin: "0 0 16px", color: "var(--text-main)", letterSpacing: 0.5 }}>
+                    SUBSCRIPTIONS
+                  </h3>
+
+                  {/* Vertical Capsule Pill Bars (Hot Pink, Purple, Deep Indigo) */}
+                  <div style={{ height: 130, display: "flex", alignItems: "flex-end", justifyContent: "space-between", gap: 6, padding: "0 4px" }}>
+                    {[
+                      { day: "SUN", bars: [{ h: 60, c: "pink" }, { h: 30, c: "purple" }] },
+                      { day: "MON", bars: [{ h: 40, c: "dark" }, { h: 80, c: "pink" }] },
+                      { day: "TUE", bars: [{ h: 90, c: "purple" }, { h: 50, c: "dark" }] },
+                      { day: "WEN", bars: [{ h: 45, c: "pink" }, { h: 70, c: "purple" }] },
+                      { day: "THU", bars: [{ h: 95, c: "purple" }, { h: 35, c: "dark" }] },
+                      { day: "FRI", bars: [{ h: 80, c: "pink" }, { h: 55, c: "purple" }] },
+                      { day: "SAT", bars: [{ h: 30, c: "dark" }, { h: 65, c: "pink" }] },
+                    ].map(col => (
+                      <div key={col.day} style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 6, flex: 1 }}>
+                        <div style={{ display: "flex", gap: 3, alignItems: "flex-end", height: 100 }}>
+                          {col.bars.map((b, i) => (
+                            <div
+                              key={i}
+                              style={{
+                                width: 9,
+                                height: `${b.h}%`,
+                                borderRadius: 999,
+                                background: b.c === "pink" ? "var(--color-pink)" : b.c === "purple" ? "var(--color-purple)" : "var(--color-indigo)"
+                              }}
+                            />
+                          ))}
+                        </div>
+                        <span style={{ fontSize: 9, fontWeight: 700, color: "var(--text-muted)" }}>{col.day}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="bar-chart-legend" style={{ marginTop: 14 }}>
+                  <div className="bar-legend-row">
+                    <i className="bar-legend-dot pink" />
+                    <span>Disparos de 1ª Abordagem pelo WhatsApp</span>
+                  </div>
+                  <div className="bar-legend-row">
+                    <i className="bar-legend-dot purple" />
+                    <span>Respostas e Interações com a IA</span>
+                  </div>
+                  <div className="bar-legend-row">
+                    <i className="bar-legend-dot dark" />
+                    <span>Reuniões Agendadas / Fechamentos</span>
+                  </div>
+                </div>
+              </div>
+            </section>
+
+            {/* Bottom Row: EARNING Wave Area Chart + Mini Calendar (Matching Image 1) */}
+            <section className="magnific-card">
+              <h3 style={{ fontSize: 15, fontWeight: 800, margin: "0 0 16px", color: "var(--text-main)", letterSpacing: 0.5 }}>
+                EARNING / METAS DE VENDAS (R$ 12.000)
+              </h3>
+
+              <div className="bottom-earning-grid">
+                {/* Wave Area Chart with Milestone Pins */}
+                <div style={{ position: "relative", width: "100%", height: 135 }}>
+                  <svg viewBox="0 0 540 130" style={{ width: "100%", height: "100%", overflow: "visible" }}>
+                    <defs>
+                      <linearGradient id="wavePinkPurple" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="0%" stopColor="#E11D88" stopOpacity="0.45" />
+                        <stop offset="100%" stopColor="#FAF1F9" stopOpacity="0.0" />
+                      </linearGradient>
+                      <linearGradient id="waveBackPurple" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="0%" stopColor="#8B24B2" stopOpacity="0.55" />
+                        <stop offset="100%" stopColor="#FAF1F9" stopOpacity="0.0" />
+                      </linearGradient>
+                    </defs>
+
+                    {/* Back Mountain (Purple) */}
+                    <path
+                      d="M 100 110 Q 180 20, 260 110"
+                      fill="url(#waveBackPurple)"
+                    />
+                    <path
+                      d="M 100 110 Q 180 20, 260 110"
+                      fill="none"
+                      stroke="#8B24B2"
+                      strokeWidth="2.5"
+                    />
+
+                    {/* Front Waves (Hot Pink) */}
+                    <path
+                      d="M 10 110 Q 70 50, 130 110 Q 230 10, 330 110 Q 390 40, 450 110 Q 490 60, 530 110 L 530 110 L 10 110 Z"
+                      fill="url(#wavePinkPurple)"
+                    />
+                    <path
+                      d="M 10 110 Q 70 50, 130 110 Q 230 10, 330 110 Q 390 40, 450 110 Q 490 60, 530 110"
+                      fill="none"
+                      stroke="#E11D88"
+                      strokeWidth="3"
+                    />
+
+                    {/* Baseline axis */}
+                    <line x1="10" y1="110" x2="530" y2="110" stroke="#E6D3E4" strokeWidth="2" />
+                    {[10, 95, 180, 265, 350, 435, 520].map((x, i) => (
+                      <circle key={i} cx={x} cy="110" r="3.5" fill="#221644" />
+                    ))}
+                  </svg>
+
+                  {/* Milestone Pins Matching Image 1 (300, 600, 350, 400) */}
+                  <div style={{ position: "absolute", left: "12%", top: 38, background: "#8B24B2", color: "#FFF", borderRadius: 999, padding: "2px 7px", fontSize: 10, fontWeight: 800 }}>
+                    R$ 3.6k
+                  </div>
+                  <div style={{ position: "absolute", left: "32%", top: 4, background: "#E11D88", color: "#FFF", borderRadius: 999, padding: "2px 7px", fontSize: 10, fontWeight: 800 }}>
+                    R$ 7.2k
+                  </div>
+                  <div style={{ position: "absolute", left: "68%", top: 30, background: "#8B24B2", color: "#FFF", borderRadius: 999, padding: "2px 7px", fontSize: 10, fontWeight: 800 }}>
+                    R$ 9.6k
+                  </div>
+                  <div style={{ position: "absolute", left: "85%", top: 46, background: "#E11D88", color: "#FFF", borderRadius: 999, padding: "2px 7px", fontSize: 10, fontWeight: 800 }}>
+                    R$ 12k
+                  </div>
+
+                  <div style={{ display: "flex", justifyContent: "space-between", fontSize: 9, fontWeight: 700, color: "var(--text-muted)", marginTop: 4, padding: "0 10px" }}>
+                    <span>SUN</span><span>MON</span><span>TUE</span><span>WEN</span><span>THU</span><span>FRI</span><span>SAT</span>
+                  </div>
+                </div>
+
+                {/* Mini Calendar Widget Matching Image 1 */}
+                <div className="mini-calendar">
+                  <div className="mini-calendar-header">
+                    <span>L</span><span>M</span><span>M</span><span>J</span><span>V</span><span>S</span><span>D</span>
+                  </div>
+                  <div className="calendar-days-grid">
+                    <span></span><span></span><span></span><span></span><span>1</span><span>2</span><span className="calendar-day-cell highlight">3</span>
+                    <span>4</span><span>5</span><span>6</span><span>7</span><span>8</span><span>9</span><span>10</span>
+                    <span>11</span><span>12</span><span>13</span><span className="calendar-day-cell active-pink">14</span><span>15</span><span>16</span><span>17</span>
+                    <span>18</span><span>19</span><span>20</span><span>21</span><span>22</span><span>23</span><span>24</span>
+                    <span className="calendar-day-cell highlight">25</span><span>26</span><span>27</span><span>28</span><span>29</span><span>30</span><span>31</span>
+                  </div>
+                </div>
+              </div>
+            </section>
           </>
         )}
 
         {/* Tab Supressões */}
         {activeTab === "suppressions" && (
-          <div className="table-container" style={{ padding: 24 }}>
+          <div className="magnific-card" style={{ background: "#FFFFFF" }}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}>
               <div>
-                <h2 style={{ fontSize: 16, fontWeight: 700, margin: "0 0 4px", color: "var(--text-primary)" }}>
-                  Contatos Suprimidos & Lista Negra
+                <h2 style={{ fontSize: 16, fontWeight: 800, margin: "0 0 4px", color: "var(--text-main)" }}>
+                  LISTA DE SUPRESSÃO & BLOQUEIOS
                 </h2>
-                <p style={{ fontSize: 12, color: "var(--text-secondary)", margin: 0 }}>
-                  Números bloqueados após solicitação de opt-out ou recusa, protegidos de novos disparos.
+                <p style={{ fontSize: 12, color: "var(--text-muted)", margin: 0 }}>
+                  Números protegidos contra envios futuros após solicitação de opt-out.
                 </p>
               </div>
-              <button className="btn-primary" onClick={() => setShowAddSuppressionModal(true)}>
+              <button className="btn-magnific-pink" onClick={() => setShowAddSuppressionModal(true)}>
                 <Plus size={14} /> Adicionar Bloqueio
               </button>
             </div>
 
-            <table className="crm-table">
+            <table className="magnific-table">
               <thead>
                 <tr>
                   <th>Telefone</th>
@@ -751,23 +945,23 @@ export default function Home() {
               <tbody>
                 {suppressions.length === 0 ? (
                   <tr>
-                    <td colSpan={4} style={{ textAlign: "center", padding: "40px", color: "var(--text-secondary)" }}>
+                    <td colSpan={4} style={{ textAlign: "center", padding: "40px", color: "var(--text-muted)" }}>
                       Nenhum telefone na lista de supressão.
                     </td>
                   </tr>
                 ) : (
                   suppressions.map(s => (
                     <tr key={s.phone}>
-                      <td style={{ fontWeight: 600 }}>{s.phone}</td>
-                      <td><span className="status-chip blocked">{s.reason}</span></td>
-                      <td style={{ color: "var(--text-secondary)" }}>{new Date(s.createdAt).toLocaleDateString("pt-BR")}</td>
+                      <td style={{ fontWeight: 700 }}>{s.phone}</td>
+                      <td><span className="pill-badge dark">{s.reason}</span></td>
+                      <td style={{ color: "var(--text-muted)" }}>{new Date(s.createdAt).toLocaleDateString("pt-BR")}</td>
                       <td style={{ textAlign: "right" }}>
                         <button
-                          className="btn-secondary"
-                          style={{ height: 28, padding: "0 8px", fontSize: 11 }}
+                          className="btn-magnific-ghost"
+                          style={{ height: 28, padding: "0 10px", fontSize: 11 }}
                           onClick={() => unblockPhone(s.phone)}
                         >
-                          Liberar número
+                          Liberar
                         </button>
                       </td>
                     </tr>
@@ -779,30 +973,29 @@ export default function Home() {
         )}
       </main>
 
-      {/* Slide-over Drawer (Linear / Attio style - Smooth slide in from right) */}
+      {/* Slide-over WhatsApp Drawer in Magnific Theme */}
       {selectedLeadId && (
-        <div className="slide-over-backdrop" onClick={() => setSelectedLeadId(null)}>
-          <div className="slide-over-drawer" onClick={e => e.stopPropagation()}>
+        <div className="magnific-drawer-backdrop" onClick={() => setSelectedLeadId(null)}>
+          <div className="magnific-drawer" onClick={e => e.stopPropagation()}>
             {/* Drawer Header */}
-            <div className="drawer-header">
+            <div style={{ padding: "18px 24px", borderBottom: "1px solid var(--card-border)", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
               <div>
                 <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                  <h3 style={{ fontSize: 16, fontWeight: 700, margin: 0, color: "var(--text-primary)" }}>
+                  <h3 style={{ fontSize: 16, fontWeight: 800, margin: 0, color: "var(--text-main)" }}>
                     {activeLead?.company || activeLead?.name}
                   </h3>
                   <a
                     href={`https://wa.me/${activeLead?.phone?.replace(/\D/g, "")}`}
                     target="_blank"
                     rel="noreferrer"
-                    style={{ color: "#10B981", display: "inline-flex", alignItems: "center" }}
-                    title="Abrir WhatsApp oficial"
+                    style={{ color: "var(--color-pink)", display: "inline-flex", alignItems: "center" }}
+                    title="Abrir no WhatsApp Oficial"
                   >
-                    <ExternalLink size={13} />
+                    <ExternalLink size={14} />
                   </a>
                 </div>
-                <div style={{ fontSize: 12, color: "var(--text-secondary)", marginTop: 4 }}>
-                  {activeLead?.name && activeLead.company && `${activeLead.name} · `}
-                  {activeLead?.phone}
+                <div style={{ fontSize: 12, color: "var(--text-muted)", marginTop: 2 }}>
+                  {activeLead?.phone} · {activeLead?.category || "Serviços"}
                 </div>
               </div>
 
@@ -812,12 +1005,13 @@ export default function Home() {
                   onChange={e => updateStatus(e.target.value)}
                   disabled={updatingStatus}
                   style={{
-                    background: "var(--bg-surface-elevated)",
-                    border: "1px solid var(--border-medium)",
-                    color: "var(--text-primary)",
-                    borderRadius: 7,
+                    background: "var(--card-bg)",
+                    border: "1px solid var(--card-border)",
+                    color: "var(--text-main)",
+                    borderRadius: 8,
                     padding: "5px 10px",
                     fontSize: 12,
+                    fontWeight: 700,
                     outline: "none"
                   }}
                 >
@@ -827,37 +1021,35 @@ export default function Home() {
                 </select>
 
                 <button
-                  className="btn-secondary"
-                  style={{ width: 30, height: 30, padding: 0, display: "grid", placeItems: "center" }}
                   onClick={() => setSelectedLeadId(null)}
-                  title="Fechar (Esc)"
+                  style={{ width: 32, height: 32, borderRadius: "50%", background: "var(--card-bg)", border: "1px solid var(--card-border)", display: "grid", placeItems: "center", cursor: "pointer", color: "var(--text-main)" }}
                 >
                   <X size={15} />
                 </button>
               </div>
             </div>
 
-            {/* Drawer Chat Body */}
-            <div className="drawer-content">
+            {/* Chat Body */}
+            <div style={{ flex: 1, overflowY: "auto", padding: "18px 24px", display: "flex", flexDirection: "column", gap: 12, background: "#FFF" }}>
               {loadingChat ? (
-                <div style={{ textAlign: "center", padding: 40, color: "var(--text-secondary)", fontSize: 13 }}>
-                  Carregando mensagens...
+                <div style={{ textAlign: "center", padding: 40, color: "var(--text-muted)", fontSize: 13 }}>
+                  Carregando conversa...
                 </div>
               ) : activeLead?.messages?.length === 0 ? (
                 <div style={{
                   padding: 24,
-                  background: "var(--bg-surface-elevated)",
-                  borderRadius: 12,
-                  border: "1px dashed var(--border-subtle)",
+                  background: "var(--card-bg)",
+                  borderRadius: 16,
+                  border: "1px dashed var(--card-border)",
                   textAlign: "center"
                 }}>
-                  <div style={{ fontWeight: 600, color: "var(--text-primary)", fontSize: 13, marginBottom: 4 }}>
+                  <div style={{ fontWeight: 800, color: "var(--text-main)", fontSize: 14, marginBottom: 4 }}>
                     Nenhuma mensagem enviada ainda
                   </div>
-                  <p style={{ fontSize: 12, color: "var(--text-secondary)", margin: "0 0 16px" }}>
-                    Clique no botão de IA abaixo para gerar a abordagem ideal (com quebra de padrão e bypass de secretária).
+                  <p style={{ fontSize: 12, color: "var(--text-muted)", margin: "0 0 16px" }}>
+                    Gere uma abordagem personalizada com a IA para captar o decisor ou passar pela secretária.
                   </p>
-                  <button className="btn-primary" onClick={requestAiDraft} disabled={generatingDraft}>
+                  <button className="btn-magnific-pink" onClick={requestAiDraft} disabled={generatingDraft}>
                     <Sparkles size={14} />
                     <span>{generatingDraft ? "Gerando..." : "Gerar abordagem com IA"}</span>
                   </button>
@@ -866,10 +1058,10 @@ export default function Home() {
                 activeLead?.messages?.map(msg => (
                   <div
                     key={msg.id}
-                    className={msg.direction === "OUTBOUND" ? "bubble-sent" : "bubble-received"}
+                    className={msg.direction === "OUTBOUND" ? "chat-bubble-outbound" : "chat-bubble-inbound"}
                   >
                     <div>{msg.body}</div>
-                    <div style={{ fontSize: 10, color: "rgba(255,255,255,0.45)", marginTop: 4, textAlign: "right" }}>
+                    <div style={{ fontSize: 10, color: msg.direction === "OUTBOUND" ? "rgba(255,255,255,0.7)" : "var(--text-muted)", marginTop: 4, textAlign: "right" }}>
                       {new Date(msg.createdAt).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}
                       {msg.direction === "OUTBOUND" && ` · ${msg.status}`}
                     </div>
@@ -878,22 +1070,22 @@ export default function Home() {
               )}
             </div>
 
-            {/* Drawer Footer & Composer */}
-            <div className="drawer-footer">
-              <div className="ai-assistant-banner">
-                <div style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 12, color: "var(--accent-primary-text)" }}>
+            {/* Composer Footer */}
+            <div style={{ padding: "16px 24px", borderTop: "1px solid var(--card-border)", background: "var(--card-bg)", display: "flex", flexDirection: "column", gap: 10 }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12, fontWeight: 700, color: "var(--color-pink)" }}>
                   <Bot size={15} />
-                  <span>IA Persuasiva (Chris Voss & Bypass de Secretária)</span>
+                  <span>IA Persuasiva (Bypass Secretária & Chris Voss)</span>
                 </div>
                 <button
                   type="button"
-                  className="btn-secondary"
+                  className="btn-magnific-ghost"
                   style={{ height: 28, padding: "0 10px", fontSize: 11 }}
                   onClick={requestAiDraft}
                   disabled={generatingDraft}
                 >
-                  <Sparkles size={12} style={{ color: "var(--accent-primary)" }} />
-                  {generatingDraft ? "Redigindo..." : "Sugerir Pitch"}
+                  <Sparkles size={12} style={{ color: "var(--color-pink)" }} />
+                  {generatingDraft ? "Gerando..." : "Sugerir Pitch"}
                 </button>
               </div>
 
@@ -906,15 +1098,15 @@ export default function Home() {
                       handleSendMessage(e);
                     }
                   }}
-                  placeholder="Digite a mensagem do WhatsApp ou gere pela IA (Ctrl+Enter para enviar)..."
+                  placeholder="Digite a mensagem do WhatsApp (Ctrl+Enter para enviar)..."
                   rows={3}
                   style={{
                     flex: 1,
-                    background: "var(--bg-input)",
-                    border: "1px solid var(--border-medium)",
-                    borderRadius: 8,
-                    padding: "10px 12px",
-                    color: "var(--text-primary)",
+                    background: "#FFFFFF",
+                    border: "1px solid var(--card-border)",
+                    borderRadius: 12,
+                    padding: "10px 14px",
+                    color: "var(--text-main)",
                     fontSize: 13,
                     resize: "none",
                     outline: "none"
@@ -922,8 +1114,8 @@ export default function Home() {
                 />
                 <button
                   type="submit"
-                  className="btn-primary"
-                  style={{ height: 42, padding: "0 16px" }}
+                  className="btn-magnific-pink"
+                  style={{ height: 42, padding: "0 18px" }}
                   disabled={sendingMsg || !composerText.trim()}
                 >
                   <Send size={15} />
@@ -937,63 +1129,63 @@ export default function Home() {
 
       {/* Modal Add Lead */}
       {showAddModal && (
-        <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.7)", display: "grid", placeItems: "center", zIndex: 110, padding: 20 }} onClick={() => setShowAddModal(false)}>
-          <div style={{ width: "min(480px, 100%)", background: "var(--bg-surface)", border: "1px solid var(--border-medium)", borderRadius: 14, padding: 24, boxShadow: "0 25px 60px rgba(0,0,0,0.8)" }} onClick={e => e.stopPropagation()}>
+        <div style={{ position: "fixed", inset: 0, background: "rgba(34, 22, 68, 0.45)", backdropFilter: "blur(4px)", display: "grid", placeItems: "center", zIndex: 110, padding: 20 }} onClick={() => setShowAddModal(false)}>
+          <div style={{ width: "min(480px, 100%)", background: "#FFFFFF", border: "1px solid var(--card-border)", borderRadius: 20, padding: 28, boxShadow: "0 25px 60px rgba(34, 22, 68, 0.2)" }} onClick={e => e.stopPropagation()}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 18 }}>
-              <h3 style={{ fontSize: 16, fontWeight: 700, color: "var(--text-primary)", margin: 0 }}>Cadastrar Novo Lead</h3>
-              <button onClick={() => setShowAddModal(false)} style={{ background: "none", border: "none", color: "var(--text-tertiary)", cursor: "pointer" }}>
+              <h3 style={{ fontSize: 17, fontWeight: 800, color: "var(--text-main)", margin: 0 }}>Cadastrar Novo Lead</h3>
+              <button onClick={() => setShowAddModal(false)} style={{ background: "none", border: "none", color: "var(--text-muted)", cursor: "pointer" }}>
                 <X size={16} />
               </button>
             </div>
 
             <form onSubmit={addLead}>
-              <label style={{ fontSize: 11, fontWeight: 600, color: "var(--text-secondary)", textTransform: "uppercase", display: "block", marginBottom: 4 }}>Nome do Contato ou Decisor</label>
+              <label style={{ fontSize: 11, fontWeight: 700, color: "var(--text-muted)", textTransform: "uppercase", display: "block", marginBottom: 4 }}>Nome do Contato ou Decisor</label>
               <input
-                style={{ width: "100%", background: "var(--bg-input)", border: "1px solid var(--border-medium)", borderRadius: 8, padding: "9px 12px", color: "var(--text-primary)", fontSize: 13, marginBottom: 14, outline: "none" }}
+                style={{ width: "100%", background: "#FAF1F9", border: "1px solid var(--card-border)", borderRadius: 10, padding: "10px 14px", color: "var(--text-main)", fontSize: 13, marginBottom: 14, outline: "none" }}
                 required
                 value={form.name}
                 onChange={e => setForm({ ...form, name: e.target.value })}
                 placeholder="Ex.: Dra. Camila Nogueira"
               />
 
-              <label style={{ fontSize: 11, fontWeight: 600, color: "var(--text-secondary)", textTransform: "uppercase", display: "block", marginBottom: 4 }}>Nome da Empresa / Clínica</label>
+              <label style={{ fontSize: 11, fontWeight: 700, color: "var(--text-muted)", textTransform: "uppercase", display: "block", marginBottom: 4 }}>Nome da Empresa / Clínica</label>
               <input
-                style={{ width: "100%", background: "var(--bg-input)", border: "1px solid var(--border-medium)", borderRadius: 8, padding: "9px 12px", color: "var(--text-primary)", fontSize: 13, marginBottom: 14, outline: "none" }}
+                style={{ width: "100%", background: "#FAF1F9", border: "1px solid var(--card-border)", borderRadius: 10, padding: "10px 14px", color: "var(--text-main)", fontSize: 13, marginBottom: 14, outline: "none" }}
                 value={form.company}
                 onChange={e => setForm({ ...form, company: e.target.value })}
                 placeholder="Ex.: Instituto Nogueira de Estética"
               />
 
-              <label style={{ fontSize: 11, fontWeight: 600, color: "var(--text-secondary)", textTransform: "uppercase", display: "block", marginBottom: 4 }}>WhatsApp (com DDD)</label>
+              <label style={{ fontSize: 11, fontWeight: 700, color: "var(--text-muted)", textTransform: "uppercase", display: "block", marginBottom: 4 }}>WhatsApp (com DDD)</label>
               <input
-                style={{ width: "100%", background: "var(--bg-input)", border: "1px solid var(--border-medium)", borderRadius: 8, padding: "9px 12px", color: "var(--text-primary)", fontSize: 13, marginBottom: 14, outline: "none" }}
+                style={{ width: "100%", background: "#FAF1F9", border: "1px solid var(--card-border)", borderRadius: 10, padding: "10px 14px", color: "var(--text-main)", fontSize: 13, marginBottom: 14, outline: "none" }}
                 required
                 value={form.phone}
                 onChange={e => setForm({ ...form, phone: e.target.value })}
                 placeholder="Ex.: 5511999999999"
               />
 
-              <label style={{ fontSize: 11, fontWeight: 600, color: "var(--text-secondary)", textTransform: "uppercase", display: "block", marginBottom: 4 }}>Segmento / Nicho</label>
+              <label style={{ fontSize: 11, fontWeight: 700, color: "var(--text-muted)", textTransform: "uppercase", display: "block", marginBottom: 4 }}>Segmento / Nicho</label>
               <input
-                style={{ width: "100%", background: "var(--bg-input)", border: "1px solid var(--border-medium)", borderRadius: 8, padding: "9px 12px", color: "var(--text-primary)", fontSize: 13, marginBottom: 14, outline: "none" }}
+                style={{ width: "100%", background: "#FAF1F9", border: "1px solid var(--card-border)", borderRadius: 10, padding: "10px 14px", color: "var(--text-main)", fontSize: 13, marginBottom: 14, outline: "none" }}
                 value={form.category}
                 onChange={e => setForm({ ...form, category: e.target.value })}
                 placeholder="Ex.: Odontologia, Energia Solar, Advocacia..."
               />
 
-              <label style={{ fontSize: 11, fontWeight: 600, color: "var(--text-secondary)", textTransform: "uppercase", display: "block", marginBottom: 4 }}>Site Atual (se houver)</label>
+              <label style={{ fontSize: 11, fontWeight: 700, color: "var(--text-muted)", textTransform: "uppercase", display: "block", marginBottom: 4 }}>Site Atual (se houver)</label>
               <input
-                style={{ width: "100%", background: "var(--bg-input)", border: "1px solid var(--border-medium)", borderRadius: 8, padding: "9px 12px", color: "var(--text-primary)", fontSize: 13, marginBottom: 14, outline: "none" }}
+                style={{ width: "100%", background: "#FAF1F9", border: "1px solid var(--card-border)", borderRadius: 10, padding: "10px 14px", color: "var(--text-main)", fontSize: 13, marginBottom: 14, outline: "none" }}
                 value={form.website}
                 onChange={e => setForm({ ...form, website: e.target.value })}
                 placeholder="Ex.: https://institutonogueira.com.br"
               />
 
               <div style={{ display: "flex", justifyContent: "flex-end", gap: 10, marginTop: 16 }}>
-                <button type="button" className="btn-secondary" onClick={() => setShowAddModal(false)}>
+                <button type="button" className="btn-magnific-ghost" onClick={() => setShowAddModal(false)}>
                   Cancelar
                 </button>
-                <button type="submit" className="btn-primary" disabled={loading}>
+                <button type="submit" className="btn-magnific-pink" disabled={loading}>
                   {loading ? "Salvando..." : "Salvar Lead"}
                 </button>
               </div>
@@ -1004,28 +1196,28 @@ export default function Home() {
 
       {/* Modal Add Suppression */}
       {showAddSuppressionModal && (
-        <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.7)", display: "grid", placeItems: "center", zIndex: 110, padding: 20 }} onClick={() => setShowAddSuppressionModal(false)}>
-          <div style={{ width: "min(460px, 100%)", background: "var(--bg-surface)", border: "1px solid var(--border-medium)", borderRadius: 14, padding: 24, boxShadow: "0 25px 60px rgba(0,0,0,0.8)" }} onClick={e => e.stopPropagation()}>
+        <div style={{ position: "fixed", inset: 0, background: "rgba(34, 22, 68, 0.45)", backdropFilter: "blur(4px)", display: "grid", placeItems: "center", zIndex: 110, padding: 20 }} onClick={() => setShowAddSuppressionModal(false)}>
+          <div style={{ width: "min(460px, 100%)", background: "#FFFFFF", border: "1px solid var(--card-border)", borderRadius: 20, padding: 28, boxShadow: "0 25px 60px rgba(34, 22, 68, 0.2)" }} onClick={e => e.stopPropagation()}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 18 }}>
-              <h3 style={{ fontSize: 16, fontWeight: 700, color: "var(--text-primary)", margin: 0 }}>Bloquear Número (Supressão)</h3>
-              <button onClick={() => setShowAddSuppressionModal(false)} style={{ background: "none", border: "none", color: "var(--text-tertiary)", cursor: "pointer" }}>
+              <h3 style={{ fontSize: 17, fontWeight: 800, color: "var(--text-main)", margin: 0 }}>Bloquear Número (Supressão)</h3>
+              <button onClick={() => setShowAddSuppressionModal(false)} style={{ background: "none", border: "none", color: "var(--text-muted)", cursor: "pointer" }}>
                 <X size={16} />
               </button>
             </div>
 
             <form onSubmit={addSuppression}>
-              <label style={{ fontSize: 11, fontWeight: 600, color: "var(--text-secondary)", textTransform: "uppercase", display: "block", marginBottom: 4 }}>WhatsApp para Bloqueio</label>
+              <label style={{ fontSize: 11, fontWeight: 700, color: "var(--text-muted)", textTransform: "uppercase", display: "block", marginBottom: 4 }}>WhatsApp para Bloqueio</label>
               <input
-                style={{ width: "100%", background: "var(--bg-input)", border: "1px solid var(--border-medium)", borderRadius: 8, padding: "9px 12px", color: "var(--text-primary)", fontSize: 13, marginBottom: 14, outline: "none" }}
+                style={{ width: "100%", background: "#FAF1F9", border: "1px solid var(--card-border)", borderRadius: 10, padding: "10px 14px", color: "var(--text-main)", fontSize: 13, marginBottom: 14, outline: "none" }}
                 required
                 value={suppressionForm.phone}
                 onChange={e => setSuppressionForm({ ...suppressionForm, phone: e.target.value })}
                 placeholder="Ex.: 5511999999999"
               />
 
-              <label style={{ fontSize: 11, fontWeight: 600, color: "var(--text-secondary)", textTransform: "uppercase", display: "block", marginBottom: 4 }}>Motivo</label>
+              <label style={{ fontSize: 11, fontWeight: 700, color: "var(--text-muted)", textTransform: "uppercase", display: "block", marginBottom: 4 }}>Motivo</label>
               <input
-                style={{ width: "100%", background: "var(--bg-input)", border: "1px solid var(--border-medium)", borderRadius: 8, padding: "9px 12px", color: "var(--text-primary)", fontSize: 13, marginBottom: 14, outline: "none" }}
+                style={{ width: "100%", background: "#FAF1F9", border: "1px solid var(--card-border)", borderRadius: 10, padding: "10px 14px", color: "var(--text-main)", fontSize: 13, marginBottom: 14, outline: "none" }}
                 required
                 value={suppressionForm.reason}
                 onChange={e => setSuppressionForm({ ...suppressionForm, reason: e.target.value })}
@@ -1033,10 +1225,10 @@ export default function Home() {
               />
 
               <div style={{ display: "flex", justifyContent: "flex-end", gap: 10, marginTop: 16 }}>
-                <button type="button" className="btn-secondary" onClick={() => setShowAddSuppressionModal(false)}>
+                <button type="button" className="btn-magnific-ghost" onClick={() => setShowAddSuppressionModal(false)}>
                   Cancelar
                 </button>
-                <button type="submit" className="btn-primary" disabled={loading}>
+                <button type="submit" className="btn-magnific-pink" disabled={loading}>
                   {loading ? "Bloqueando..." : "Confirmar Bloqueio"}
                 </button>
               </div>
