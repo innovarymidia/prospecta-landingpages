@@ -29,3 +29,4 @@ test("isSameOrigin validates same host and development environments correctly", 
   assert.equal(isSameOrigin(null, "localhost:3000", "http://localhost:3000", true), true);
   assert.equal(isSameOrigin(null, "app.prospecta.com", "https://app.prospecta.com", false), false);
 });
+

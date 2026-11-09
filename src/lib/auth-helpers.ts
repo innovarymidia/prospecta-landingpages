@@ -25,3 +25,4 @@ export function isSameOrigin(
     return false;
   }
 }
+

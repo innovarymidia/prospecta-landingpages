@@ -5,6 +5,7 @@ generator client {
 datasource db {
   provider = "postgresql"
   url      = env("DATABASE_URL")
+  schemas  = ["prospeccao_wa"]
 }
 
 enum LeadStatus {
@@ -18,11 +19,15 @@ enum LeadStatus {
   LOST
   OPTED_OUT
   BLOCKED
+
+  @@schema("prospeccao_wa")
 }
 
 enum MessageDirection {
   INBOUND
   OUTBOUND
+
+  @@schema("prospeccao_wa")
 }
 
 enum MessageStatus {
@@ -30,11 +35,15 @@ enum MessageStatus {
   SENT
   DELIVERED
   FAILED
+
+  @@schema("prospeccao_wa")
 }
 
 enum MessagePurpose {
   INITIAL
   REPLY
+
+  @@schema("prospeccao_wa")
 }
 
 model Lead {
@@ -55,7 +64,9 @@ model Lead {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
   messages Message[]
+
   @@index([status, createdAt])
+  @@schema("prospeccao_wa")
 }
 
 model Message {
@@ -68,7 +79,9 @@ model Message {
   body String
   externalId String? @unique
   createdAt DateTime @default(now())
+
   @@index([leadId, createdAt])
+  @@schema("prospeccao_wa")
 }
 
 model Campaign {
@@ -92,6 +105,8 @@ model Campaign {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
   searchRuns SearchRun[]
+
+  @@schema("prospeccao_wa")
 }
 
 model SearchRun {
@@ -105,11 +120,15 @@ model SearchRun {
   error String?
   startedAt DateTime @default(now())
   finishedAt DateTime?
+
   @@index([campaignId, startedAt])
+  @@schema("prospeccao_wa")
 }
 
 model Suppression {
   phone String @id
   reason String
   createdAt DateTime @default(now())
+
+  @@schema("prospeccao_wa")
 }
