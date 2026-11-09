@@ -133,10 +133,15 @@ ${messages.map((m, idx) => `[Mensagem ${idx + 1}]: ${m}`).join("\n")}
 
 Responda agora com a melhor mensagem para dar seguimento à conversa de forma persuasiva e natural:`;
 
-  const result = await model.generateContent([
-    { text: systemInstruction },
-    { text: conversationHistory },
-  ]);
+  try {
+    const result = await model.generateContent([
+      { text: systemInstruction },
+      { text: conversationHistory },
+    ]);
 
-  return result.response.text().trim();
+    return result.response.text().trim();
+  } catch (err) {
+    console.warn("[AI] Falha na chamada Gemini em generateReply:", err instanceof Error ? err.message : err);
+    return `Olá! Obrigado pelo retorno. Nosso projeto é taxa única de R$ 1.200 (sem mensalidades), com design sob medida focado em WhatsApp e entregue pronto no seu domínio ou onde preferir. Teria 3 minutinhos para eu te mostrar um modelo do seu segmento?`;
+  }
 }
