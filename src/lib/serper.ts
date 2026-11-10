@@ -111,3 +111,4 @@ export async function searchSerperCampaign(campaign: SerperSearchCampaign): Prom
 
   return allCandidates;
 }
+

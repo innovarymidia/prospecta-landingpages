@@ -1,7 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
 import { jwtVerify } from "jose";
 
-const openPaths = new Set(["/login", "/api/auth/login", "/api/auth/logout", "/api/webhooks/evolution", "/api/inngest"]);
+const openPaths = new Set([
+  "/login",
+  "/api/auth/login",
+  "/api/auth/logout",
+  "/api/webhooks/evolution",
+  "/api/inngest",
+  "/api/cron/daily-search",
+]);
 
 export async function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl;

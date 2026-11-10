@@ -38,3 +38,4 @@ test("parseLeadsFromCsv maps English headers, separate contact name and escaped 
   assert.equal(candidates[0].website, "https://instagram.com/forteloc");
   assert.equal(candidates[0].reviewsCount, 14);
 });
+

@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse } from "next/server";
+import { after, NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { timingSafeEqual } from "node:crypto";
 import { db } from "@/lib/db";
@@ -10,7 +10,13 @@ import {
   isOutboundSystemEcho,
   shouldAiAutoReply,
 } from "@/lib/safety";
-import { inngest } from "@/inngest/client";
+import {
+  runDirectAudioWaitAndReply,
+  runDirectInboundWaitAndReply,
+  trySendInngestEvent,
+} from "@/lib/workflows";
+
+export const maxDuration = 60;
 
 const eventSchema = z.object({
   event: z.string().optional(),
@@ -150,11 +156,18 @@ export async function POST(req: NextRequest) {
     const duplicate = await db.message.findUnique({ where: { externalId: data.key.id } });
     if (duplicate) {
       if (shouldAiAutoReply(lead) && textBody && duplicate.direction === "INBOUND" && duplicate.leadId === lead.id) {
-        await inngest.send({
+        const queued = await trySendInngestEvent({
           id: `inbound-${duplicate.id}`,
           name: "prospecta/message.received",
           data: { leadId: lead.id, messageId: duplicate.id },
         });
+        if (!queued) {
+          after(() =>
+            runDirectInboundWaitAndReply(lead.id, duplicate.id).catch(err =>
+              console.error("[Webhook] Falha resposta direta:", err)
+            )
+          );
+        }
       }
       return NextResponse.json({ ok: true, duplicate: true });
     }
@@ -187,27 +200,43 @@ export async function POST(req: NextRequest) {
       "";
     const inlineAudio = rawBase64.length > 0 && rawBase64.length <= 250_000 ? rawBase64 : undefined;
 
-    await inngest.send({
+    const audioPayload = {
+      leadId: lead.id,
+      messageId: inbound.id,
+      audioKey: data.key.id ? { id: data.key.id, remoteJid: data.key.remoteJid } : undefined,
+      audioBase64: inlineAudio,
+      audioMimeType: audioInfo?.mimetype || "audio/ogg",
+    };
+
+    const queued = await trySendInngestEvent({
       id: `audio-${inbound.id}`,
       name: "prospecta/audio.transcribe",
-      data: {
-        leadId: lead.id,
-        messageId: inbound.id,
-        audioKey: data.key.id ? { id: data.key.id, remoteJid: data.key.remoteJid } : undefined,
-        audioBase64: inlineAudio,
-        audioMimeType: audioInfo?.mimetype || "audio/ogg",
-      },
+      data: audioPayload,
     });
+    if (!queued) {
+      after(() =>
+        runDirectAudioWaitAndReply(audioPayload).catch(err =>
+          console.error("[Webhook] Falha transcrição direta:", err)
+        )
+      );
+    }
     return NextResponse.json({ ok: true, audioQueued: true });
   }
 
   const autoReplyAllowed = shouldAiAutoReply(lead);
   if (autoReplyAllowed) {
-    await inngest.send({
+    const queued = await trySendInngestEvent({
       id: `inbound-${inbound.id}`,
       name: "prospecta/message.received",
       data: { leadId: lead.id, messageId: inbound.id },
     });
+    if (!queued) {
+      after(() =>
+        runDirectInboundWaitAndReply(lead.id, inbound.id).catch(err =>
+          console.error("[Webhook] Falha resposta direta:", err)
+        )
+      );
+    }
   }
 
   return NextResponse.json({

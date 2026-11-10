@@ -9,3 +9,4 @@ export function getActiveSearchProvider(): SearchProvider | null {
   if (process.env.OUTSCRAPER_API_KEY?.trim()) return "outscraper";
   return null;
 }
+

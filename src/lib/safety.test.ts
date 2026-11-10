@@ -1,12 +1,14 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import {
+  getDirectBufferSeconds,
   getInboundBufferSeconds,
   isLeadBlocked,
   isOptOutMessage,
   isOutboundSystemEcho,
   reopenedLeadStatus,
   shouldAiAutoReply,
+  shouldUseInngest,
 } from "./safety.ts";
 
 test("isLeadBlocked returns true for invalid or blocked leads", () => {
@@ -72,4 +74,16 @@ test("isOutboundSystemEcho matches by externalId or recent identical body", () =
   assert.equal(isOutboundSystemEcho("Qualquer texto", "msg-sys-1", recents), true);
   assert.equal(isOutboundSystemEcho("Segue o link da prévia ", undefined, recents), true);
   assert.equal(isOutboundSystemEcho("Mensagem digitada no celular", "msg-cel-99", recents), false);
+});
+
+test("shouldUseInngest requires keys only in production and INNGEST_DEV in development", () => {
+  assert.equal(shouldUseInngest({ NODE_ENV: "production" }), false);
+  assert.equal(
+    shouldUseInngest({ NODE_ENV: "production", INNGEST_EVENT_KEY: "evt", INNGEST_SIGNING_KEY: "sign" }),
+    true
+  );
+  assert.equal(shouldUseInngest({ NODE_ENV: "development", INNGEST_DEV: "1" }), true);
+  assert.equal(shouldUseInngest({ NODE_ENV: "development", INNGEST_DEV: "0" }), false);
+  assert.equal(getDirectBufferSeconds("60"), 45);
+  assert.equal(getDirectBufferSeconds("10"), 30);
 });

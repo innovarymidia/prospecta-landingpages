@@ -1,9 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { authorized, unauthorized, sameOrigin } from "@/lib/auth";
-import { inngest } from "@/inngest/client";
 import { isValidPreviewImage } from "@/lib/sniper";
 import { getMessagingEnabled } from "@/lib/settings";
+import { deliverOutboundMessage, trySendInngestEvent } from "@/lib/workflows";
 
 export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   if (!await authorized()) return unauthorized();
@@ -61,14 +61,23 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     });
   }
 
-  await inngest.send({
+  const sentViaQueue = await trySendInngestEvent({
     id: `send-${msg.id}`,
     name: "prospecta/message.send",
     data: { leadId: id, messageId: msg.id },
   });
 
+  if (!sentViaQueue) {
+    try {
+      await deliverOutboundMessage(id, msg.id, { markFailedOnError: true });
+    } catch (err) {
+      const reason = err instanceof Error ? err.message : "Erro ao enviar mensagem";
+      return NextResponse.json({ error: `Falha no envio WhatsApp: ${reason}` }, { status: 502 });
+    }
+  }
+
   return NextResponse.json(
-    { queued: true, messageId: msg.id, purpose, hasMedia: Boolean(candidateMedia), aiPaused: purpose === "REPLY" },
-    { status: 202 }
+    { queued: sentViaQueue, sent: !sentViaQueue, messageId: msg.id, purpose, hasMedia: Boolean(candidateMedia), aiPaused: purpose === "REPLY" },
+    { status: sentViaQueue ? 202 : 200 }
   );
 }

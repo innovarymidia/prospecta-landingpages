@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { authorized, sameOrigin, unauthorized } from "@/lib/auth";
 import { checkEvolutionConnection } from "@/lib/evolution";
+import { shouldUseInngest } from "@/lib/safety";
 import { getActiveSearchProvider } from "@/lib/search-provider";
 import { getMessagingEnabled, setMessagingEnabled } from "@/lib/settings";
 import { resolveAppBaseUrl } from "@/lib/sniper";
@@ -26,6 +27,7 @@ export async function GET(req: NextRequest) {
     aiConfigured: Boolean(process.env.GEMINI_API_KEY || process.env.GEMINI_WHATSAPP_API_KEY),
     searchConfigured: Boolean(searchProvider),
     searchProvider,
+    orchestrationMode: shouldUseInngest() ? "inngest" : "direct",
   });
 }
 

@@ -103,3 +103,4 @@ test("filterQualifiedCandidates filters websites, invalid 0800 phones and dedupl
   assert.equal(strict.qualified[0].name, "Qualificada Maps");
   assert.equal(strict.skippedUnqualified, 1);
 });
+

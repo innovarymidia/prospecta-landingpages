@@ -33,6 +33,22 @@ export function getInboundBufferSeconds(rawValue?: string | null): number {
   return Math.max(30, Math.round(parsed));
 }
 
+export function getDirectBufferSeconds(rawValue?: string | null): number {
+  return Math.min(getInboundBufferSeconds(rawValue), 45);
+}
+
+export function shouldUseInngest(env: {
+  NODE_ENV?: string;
+  INNGEST_DEV?: string;
+  INNGEST_EVENT_KEY?: string;
+  INNGEST_SIGNING_KEY?: string;
+} = process.env): boolean {
+  if (env.NODE_ENV === "production") {
+    return Boolean(env.INNGEST_EVENT_KEY?.trim() && env.INNGEST_SIGNING_KEY?.trim());
+  }
+  return env.INNGEST_DEV === "1";
+}
+
 const OPT_OUT_REGEX = /\b(pare|parar|stop|remover|não me contate|nao me contate|sair da lista)\b/i;
 
 export function isOptOutMessage(text: string): boolean {

@@ -198,3 +198,4 @@ export function parseLeadsFromCsv(
 
   return { candidates, parsedRows: dataRows.length };
 }
+
