@@ -3,7 +3,10 @@ import { db } from "@/lib/db";
 import { generateReply, transcribeAudio } from "@/lib/ai";
 import { getMediaBase64, sendMedia, sendText } from "@/lib/evolution";
 import { buildTrackedPreviewUrl, pickNextQueueCampaignId, resolveAppBaseUrl } from "@/lib/sniper";
+import { importLeadCandidates } from "@/lib/lead-import";
 import { importSearchResults, pollSearch, submitSearch } from "@/lib/outscraper";
+import { getActiveSearchProvider } from "@/lib/search-provider";
+import { searchSerperCampaign } from "@/lib/serper";
 import { getInboundBufferSeconds, isLeadBlocked, isOptOutMessage, shouldAiAutoReply } from "@/lib/safety";
 import { getMessagingEnabled } from "@/lib/settings";
 
@@ -213,6 +216,8 @@ export const queueDueSearches = inngest.createFunction(
   { id: "prospecta-schedule-searches", retries: 2 },
   { cron: "15 * * * *" },
   async ({ step }) => {
+    if (!getActiveSearchProvider()) return { queued: 0, skipped: "no-search-provider" };
+
     const nextCampaignId = await step.run("find-next-daily-campaign", async () => {
       const dailyCutoff = new Date(Date.now() - 23 * 60 * 60 * 1000);
       const [recentRun, activeCampaign] = await Promise.all([
@@ -280,18 +285,33 @@ export const searchCampaign = inngest.createFunction(
     });
     if (!run) return { skipped: true };
     try {
-      if (!process.env.OUTSCRAPER_API_KEY) throw new Error("OUTSCRAPER_API_KEY não configurada");
-      const submitted = await step.run("submit-outscreener-task", () => submitSearch(run.campaign));
-      if (submitted.failure) throw new Error("Outscraper recusou a solicitação de busca");
-      let ready = submitted.ready;
-      for (let poll = 0; !ready && poll < 24; poll++) {
-        await step.sleep(`wait-outscreener-${attempt}-${poll}`, "20s");
-        const state = await step.run(`poll-outscreener-${attempt}-${poll}`, () => pollSearch(submitted.taskId));
-        if (state.failure) throw new Error("Outscraper terminou a busca com falha");
-        ready = state.ready;
+      const provider = getActiveSearchProvider();
+      if (!provider) throw new Error("Configure SERPER_API_KEY (grátis) ou OUTSCRAPER_API_KEY");
+
+      let imported: { found: number; added: number };
+      if (provider === "serper") {
+        const result = await step.run("search-and-import-serper", async () => {
+          const candidates = await searchSerperCampaign(run.campaign);
+          return importLeadCandidates(candidates, {
+            websiteTarget: run.campaign.websiteTarget,
+            requireMapsScore: true,
+            defaultSource: "Serper Maps",
+          });
+        });
+        imported = { found: result.qualified, added: result.added };
+      } else {
+        const submitted = await step.run("submit-outscreener-task", () => submitSearch(run.campaign));
+        if (submitted.failure) throw new Error("Outscraper recusou a solicitação de busca");
+        let ready = submitted.ready;
+        for (let poll = 0; !ready && poll < 24; poll++) {
+          await step.sleep(`wait-outscreener-${attempt}-${poll}`, "20s");
+          const state = await step.run(`poll-outscreener-${attempt}-${poll}`, () => pollSearch(submitted.taskId));
+          if (state.failure) throw new Error("Outscraper terminou a busca com falha");
+          ready = state.ready;
+        }
+        if (!ready) throw new Error("Outscraper excedeu o tempo de espera de 8 minutos");
+        imported = await step.run("import-search-results", () => importSearchResults(submitted.taskId, campaignId));
       }
-      if (!ready) throw new Error("Outscraper excedeu o tempo de espera de 8 minutos");
-      const imported = await step.run("import-search-results", () => importSearchResults(submitted.taskId, campaignId));
       await step.run("finish-search-run", async () => {
         await db.$transaction([
           db.searchRun.update({ where: { id: run.runId }, data: { status: "SUCCESS", found: imported.found, added: imported.added, finishedAt: new Date() } }),

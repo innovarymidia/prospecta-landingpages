@@ -18,10 +18,12 @@ import {
   ShieldBan,
   Sparkles,
   Sun,
+  Upload,
   X,
 } from "lucide-react";
 import CampaignsPanel from "@/components/CampaignsPanel";
 import DashboardOverview, { SystemStatus } from "@/components/DashboardOverview";
+import ImportCsvModal from "@/components/ImportCsvModal";
 import LeadConversationPane, {
   avatarPalette,
   getInitials,
@@ -76,6 +78,7 @@ export default function Home() {
   const [suppressions, setSuppressions] = useState<Suppression[]>([]);
   const [query, setQuery] = useState("");
   const [showAddModal, setShowAddModal] = useState(false);
+  const [showImportModal, setShowImportModal] = useState(false);
   const [showAddSuppressionModal, setShowAddSuppressionModal] = useState(false);
   const [form, setForm] = useState({
     name: "",
@@ -176,12 +179,13 @@ export default function Home() {
         if (mobileMenuOpen) setMobileMenuOpen(false);
         if (selectedLeadId && activeView !== "chat") setSelectedLeadId(null);
         if (showAddModal) setShowAddModal(false);
+        if (showImportModal) setShowImportModal(false);
         if (showAddSuppressionModal) setShowAddSuppressionModal(false);
       }
     }
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [activeView, mobileMenuOpen, selectedLeadId, showAddModal, showAddSuppressionModal]);
+  }, [activeView, mobileMenuOpen, selectedLeadId, showAddModal, showImportModal, showAddSuppressionModal]);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -1036,7 +1040,11 @@ export default function Home() {
             </div>
           </div>
 
-          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+            <button type="button" className="fd-btn fd-btn-rounded fd-btn-sm" onClick={() => setShowImportModal(true)}>
+              <Upload size={14} />
+              <span>Importar CSV</span>
+            </button>
             <button className="fd-btn fd-btn-primary fd-btn-rounded fd-btn-sm" onClick={() => setShowAddModal(true)}>
               <Plus size={15} />
               <span>Nova Empresa</span>
@@ -1350,7 +1358,14 @@ export default function Home() {
             </div>
           )}
 
-          {activeView === "campaigns" && <CampaignsPanel onNotify={notify} />}
+          {activeView === "campaigns" && (
+            <CampaignsPanel
+              onNotify={notify}
+              searchConfigured={systemStatus?.searchConfigured}
+              searchProvider={systemStatus?.searchProvider}
+              onOpenCsvImport={() => setShowImportModal(true)}
+            />
+          )}
 
           {activeView === "suppressions" && (
             <div className="fd-card">
@@ -1482,6 +1497,13 @@ export default function Home() {
           </div>
         </div>
       )}
+
+      <ImportCsvModal
+        open={showImportModal}
+        onClose={() => setShowImportModal(false)}
+        onImported={loadLeads}
+        onNotify={notify}
+      />
 
       {/* Modal Bloquear Numero */}
       {showAddSuppressionModal && (

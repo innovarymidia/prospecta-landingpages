@@ -17,6 +17,7 @@ export type SystemStatus = {
   isLocalhostUrl?: boolean;
   aiConfigured?: boolean;
   searchConfigured?: boolean;
+  searchProvider?: "serper" | "outscraper" | null;
 };
 
 type Props = {

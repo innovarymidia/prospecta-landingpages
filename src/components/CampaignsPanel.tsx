@@ -58,9 +58,17 @@ function formatIntervalLabel(hours: number): string {
 
 interface CampaignsPanelProps {
   onNotify?: (msg: string) => void;
+  searchConfigured?: boolean;
+  searchProvider?: "serper" | "outscraper" | null;
+  onOpenCsvImport?: () => void;
 }
 
-export default function CampaignsPanel({ onNotify }: CampaignsPanelProps) {
+export default function CampaignsPanel({
+  onNotify,
+  searchConfigured,
+  searchProvider,
+  onOpenCsvImport,
+}: CampaignsPanelProps) {
   const [campaigns, setCampaigns] = useState<Campaign[]>([]);
   const [form, setForm] = useState(empty);
   const [show, setShow] = useState(false);
@@ -203,20 +211,30 @@ export default function CampaignsPanel({ onNotify }: CampaignsPanelProps) {
         <div style={{ display: "flex", alignItems: "center", gap: 12, flex: "1 1 240px" }}>
           <ShieldCheck size={20} style={{ color: "var(--fd-primary)", flexShrink: 0 }} />
           <div style={{ fontSize: 13, color: "var(--fd-gray-700)", lineHeight: 1.45 }}>
-            <strong style={{ color: "var(--fd-dark)" }}>Esteira diária inteligente (1 cidade nova por dia):</strong> a captura roda independente dos envios de WhatsApp, filtrando empresas com nota 4,0 ou mais, mínimo 5 avaliações e sem site próprio (incluindo Instagram). Você pode usar <strong>Buscar agora</strong> a qualquer momento.
+            <strong style={{ color: "var(--fd-dark)" }}>Esteira diária inteligente (1 cidade nova por dia):</strong> a captura roda independente dos envios de WhatsApp, filtrando empresas com nota 4,0 ou mais, mínimo 5 avaliações e sem site próprio (incluindo Instagram).{" "}
+            {searchConfigured === false
+              ? "Para ativar grátis sem cartão, configure SERPER_API_KEY (2.500 buscas gratuitas no Maps) ou importe uma planilha pelo botão Importar CSV."
+              : `Provedor ativo: ${searchProvider === "serper" ? "Serper Maps (gratuito)" : "Google Maps API"}. Você pode usar Buscar agora a qualquer momento.`}
           </div>
         </div>
 
-        <button
-          className="fd-btn fd-btn-primary fd-btn-rounded"
-          onClick={() => {
-            setError("");
-            setShow(true);
-          }}
-        >
-          <Plus size={15} />
-          <span>Nova Busca</span>
-        </button>
+        <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+          {onOpenCsvImport && (
+            <button type="button" className="fd-btn fd-btn-rounded" onClick={onOpenCsvImport}>
+              Importar CSV
+            </button>
+          )}
+          <button
+            className="fd-btn fd-btn-primary fd-btn-rounded"
+            onClick={() => {
+              setError("");
+              setShow(true);
+            }}
+          >
+            <Plus size={15} />
+            <span>Nova Busca</span>
+          </button>
+        </div>
       </div>
 
       {/* Filtros da Esteira */}

@@ -2,10 +2,11 @@ import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { authorized, sameOrigin, unauthorized } from "@/lib/auth";
 import { inngest } from "@/inngest/client";
+import { getActiveSearchProvider } from "@/lib/search-provider";
 export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   if (!await authorized()) return unauthorized();
   if (!sameOrigin(req)) return NextResponse.json({ error: "Origem inválida" }, { status: 403 });
-  if (!process.env.OUTSCRAPER_API_KEY) return NextResponse.json({ error: "Configure OUTSCRAPER_API_KEY" }, { status: 503 });
+  if (!getActiveSearchProvider()) return NextResponse.json({ error: "Configure SERPER_API_KEY (grátis) ou OUTSCRAPER_API_KEY para buscar no Maps" }, { status: 503 });
   const { id } = await params; const campaign = await db.campaign.findUnique({ where: { id } });
   if (!campaign) return NextResponse.json({ error: "Busca não encontrada" }, { status: 404 });
   const cutoff = new Date(Date.now() - 5 * 60 * 1000); const now = new Date();

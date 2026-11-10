@@ -1,5 +1,4 @@
-import { normalizePhone } from "@/lib/phone";
-import { isQualifiedMapsLead } from "@/lib/sniper";
+import { importLeadCandidates, type RawLeadCandidate } from "@/lib/lead-import";
 type Place = Record<string, unknown>;
 type SearchCampaign = { searchTerms: string[]; location: string; regionCode: string | null; language: string; maxResults: number; websiteTarget: string };
 export type OutscraperRequest = { taskId: string; ready: boolean; failure: boolean };
@@ -83,34 +82,29 @@ export async function importSearchResults(taskId: string, campaignId: string) {
   const { db } = await import("@/lib/db");
   const campaign = await db.campaign.findUnique({ where: { id: campaignId } });
   if (!campaign) throw new Error("Busca removida antes da importação");
-  const candidates = result.data.flatMap(item => {
-    const name = stringField(item, "name"); const phone = normalizePhone(stringField(item, "phone"));
-    const website = stringField(item, "site", "website"); const placeId = stringField(item, "place_id", "google_id");
-    const status = stringField(item, "business_status").toUpperCase();
-    const rating = numberField(item, "rating");
+  const candidates: RawLeadCandidate[] = result.data.map(item => {
+    const name = stringField(item, "name");
+    const placeId = stringField(item, "place_id", "google_id");
     const reviewsRaw = numberField(item, "reviews", "reviews_count");
-    const reviewsCount = reviewsRaw !== null ? Math.max(0, Math.round(reviewsRaw)) : null;
-    if (
-      !isQualifiedMapsLead({
-        name,
-        phone,
-        website,
-        businessStatus: status,
-        rating,
-        reviewsCount,
-        websiteTarget: campaign.websiteTarget,
-      })
-    ) {
-      return [];
-    }
-    const hours = hoursField(item);
-    return [{ name: name.slice(0, 180), phone, company: name.slice(0, 180), website: website || null, address: stringField(item, "full_address").slice(0, 300) || null, category: stringField(item, "type", "category").slice(0, 120) || null, rating, reviewsCount, hours, providerId: placeId ? `outscraper:${placeId}`.slice(0, 190) : null, source: `Outscraper: ${stringField(item, "query")}`.slice(0, 190), status: "READY" as const }];
+    return {
+      name,
+      company: name,
+      phone: stringField(item, "phone"),
+      website: stringField(item, "site", "website") || null,
+      address: stringField(item, "full_address") || null,
+      category: stringField(item, "type", "category") || null,
+      businessStatus: stringField(item, "business_status") || null,
+      rating: numberField(item, "rating"),
+      reviewsCount: reviewsRaw !== null ? Math.max(0, Math.round(reviewsRaw)) : null,
+      hours: hoursField(item),
+      providerId: placeId ? `outscraper:${placeId}` : null,
+      source: `Outscraper: ${stringField(item, "query")}`,
+    };
   });
-  const uniqueCandidates = Array.from(new Map(candidates.map(item => [item.phone, item])).values());
-  if (!uniqueCandidates.length) return { found: 0, added: 0 };
-  const suppressed = await db.suppression.findMany({ where: { phone: { in: uniqueCandidates.map(item => item.phone) } }, select: { phone: true } });
-  const blockedPhones = new Set(suppressed.map(item => item.phone));
-  const eligible = uniqueCandidates.filter(item => !blockedPhones.has(item.phone));
-  const created = eligible.length ? await db.lead.createMany({ data: eligible, skipDuplicates: true }) : { count: 0 };
-  return { found: uniqueCandidates.length, added: created.count };
+  const imported = await importLeadCandidates(candidates, {
+    websiteTarget: campaign.websiteTarget,
+    requireMapsScore: true,
+    defaultSource: "Outscraper",
+  });
+  return { found: imported.qualified, added: imported.added };
 }

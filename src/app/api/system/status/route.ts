@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { authorized, sameOrigin, unauthorized } from "@/lib/auth";
 import { checkEvolutionConnection } from "@/lib/evolution";
+import { getActiveSearchProvider } from "@/lib/search-provider";
 import { getMessagingEnabled, setMessagingEnabled } from "@/lib/settings";
 import { resolveAppBaseUrl } from "@/lib/sniper";
 
@@ -14,6 +15,7 @@ export async function GET(req: NextRequest) {
   ]);
   const publicAppUrl = resolveAppBaseUrl(req.nextUrl.origin);
   const isLocalhostUrl = /localhost|127\.0\.0\.1/i.test(publicAppUrl);
+  const searchProvider = getActiveSearchProvider();
 
   return NextResponse.json({
     automationEnabled: messagingEnabled,
@@ -22,7 +24,8 @@ export async function GET(req: NextRequest) {
     publicAppUrl,
     isLocalhostUrl,
     aiConfigured: Boolean(process.env.GEMINI_API_KEY || process.env.GEMINI_WHATSAPP_API_KEY),
-    searchConfigured: Boolean(process.env.OUTSCRAPER_API_KEY),
+    searchConfigured: Boolean(searchProvider),
+    searchProvider,
   });
 }
 
