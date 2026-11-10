@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useEffect, useState } from "react";
+import { FormEvent, useEffect, useMemo, useState } from "react";
 import { Clock3, MapPin, Play, Plus, Search, ShieldCheck, Target, ToggleLeft, ToggleRight, Trash2, X } from "lucide-react";
 
 type Run = {
@@ -36,9 +36,9 @@ const empty = {
   terms: "",
   location: "",
   regionCode: "BR",
-  maxResults: 20,
+  maxResults: 25,
   websiteTarget: "missing",
-  intervalHours: 168,
+  intervalHours: 720,
 };
 
 const statusLabel: Record<string, string> = {
@@ -48,6 +48,13 @@ const statusLabel: Record<string, string> = {
   QUEUED: "Na fila",
   PAUSED: "Pausada",
 };
+
+function formatIntervalLabel(hours: number): string {
+  if (hours >= 720) return "A cada 30 dias";
+  if (hours >= 48) return `A cada ${Math.round(hours / 24)} dias`;
+  if (hours === 24) return "Diária";
+  return `A cada ${hours}h`;
+}
 
 interface CampaignsPanelProps {
   onNotify?: (msg: string) => void;
@@ -60,6 +67,8 @@ export default function CampaignsPanel({ onNotify }: CampaignsPanelProps) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
+  const [filterTab, setFilterTab] = useState<"ALL" | "QUEUE" | "DONE" | "PAUSED">("ALL");
+  const [searchText, setSearchText] = useState("");
 
   async function load() {
     const r = await fetch("/api/campaigns");
@@ -161,6 +170,21 @@ export default function CampaignsPanel({ onNotify }: CampaignsPanelProps) {
     }
   }
 
+  const queueCount = campaigns.filter(c => c.enabled && !c.lastSearchedAt).length;
+  const doneCount = campaigns.filter(c => Boolean(c.lastSearchedAt)).length;
+  const pausedCount = campaigns.filter(c => !c.enabled).length;
+
+  const filteredCampaigns = useMemo(() => {
+    const q = searchText.trim().toLowerCase();
+    return campaigns.filter(c => {
+      if (filterTab === "QUEUE" && (!c.enabled || Boolean(c.lastSearchedAt))) return false;
+      if (filterTab === "DONE" && !c.lastSearchedAt) return false;
+      if (filterTab === "PAUSED" && c.enabled) return false;
+      if (!q) return true;
+      return `${c.name} ${c.location} ${c.searchTerms.join(" ")}`.toLowerCase().includes(q);
+    });
+  }, [campaigns, filterTab, searchText]);
+
   return (
     <div>
       {/* Notice Banner + Nova Busca Action */}
@@ -178,9 +202,9 @@ export default function CampaignsPanel({ onNotify }: CampaignsPanelProps) {
       >
         <div style={{ display: "flex", alignItems: "center", gap: 12, flex: 1, minWidth: 260 }}>
           <ShieldCheck size={20} style={{ color: "#5f76e8", flexShrink: 0 }} />
-          <span style={{ fontSize: 14, color: "#4f5467" }}>
-            A busca apenas encontra e salva locadoras no Maps sem enviar mensagens automáticas. O envio da prévia continua sob seu controle.
-          </span>
+          <div style={{ fontSize: 13, color: "#4f5467", lineHeight: 1.45 }}>
+            <strong style={{ color: "#1c2d41" }}>Esteira diária inteligente (1 cidade nova por dia):</strong> a captura roda independente dos envios de WhatsApp, filtrando empresas com nota 4,0 ou mais, mínimo 5 avaliações e sem site próprio (incluindo Instagram). Você pode usar <strong>Buscar agora</strong> a qualquer momento.
+          </div>
         </div>
 
         <button
@@ -194,6 +218,54 @@ export default function CampaignsPanel({ onNotify }: CampaignsPanelProps) {
           <span>Nova Busca</span>
         </button>
       </div>
+
+      {/* Filtros da Esteira */}
+      {campaigns.length > 0 && (
+        <div
+          className="fd-card"
+          style={{
+            padding: "14px 20px",
+            flexDirection: "row",
+            alignItems: "center",
+            justifyContent: "space-between",
+            gap: 12,
+            flexWrap: "wrap",
+          }}
+        >
+          <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+            {[
+              { id: "ALL", label: `Todas (${campaigns.length})` },
+              { id: "QUEUE", label: `Na esteira (${queueCount})` },
+              { id: "DONE", label: `Executadas (${doneCount})` },
+              { id: "PAUSED", label: `Pausadas (${pausedCount})` },
+            ].map(tab => (
+              <button
+                key={tab.id}
+                type="button"
+                onClick={() => setFilterTab(tab.id as "ALL" | "QUEUE" | "DONE" | "PAUSED")}
+                className={`fd-btn fd-btn-sm fd-btn-rounded ${filterTab === tab.id ? "fd-btn-primary" : ""}`}
+              >
+                {tab.label}
+              </button>
+            ))}
+          </div>
+
+          <div style={{ position: "relative", minWidth: 220 }}>
+            <input
+              className="fd-input"
+              type="search"
+              style={{ height: 34, fontSize: 13, paddingRight: 30 }}
+              placeholder="Filtrar por cidade ou nome..."
+              value={searchText}
+              onChange={e => setSearchText(e.target.value)}
+            />
+            <Search
+              size={14}
+              style={{ position: "absolute", right: 10, top: "50%", transform: "translateY(-50%)", color: "#7c8798" }}
+            />
+          </div>
+        </div>
+      )}
 
       {notice && (
         <div
@@ -234,7 +306,7 @@ export default function CampaignsPanel({ onNotify }: CampaignsPanelProps) {
         </div>
       )}
 
-      {campaigns.length === 0 ? (
+      {filteredCampaigns.length === 0 ? (
         <div className="fd-card" style={{ padding: "54px 20px", textAlign: "center", alignItems: "center" }}>
           <div
             style={{
@@ -251,19 +323,23 @@ export default function CampaignsPanel({ onNotify }: CampaignsPanelProps) {
             <Search size={22} />
           </div>
           <h3 style={{ fontSize: 18, fontWeight: 500, color: "#1c2d41", margin: "0 0 6px" }}>
-            Nenhuma busca configurada
+            {campaigns.length === 0 ? "Nenhuma busca configurada" : "Nenhuma cidade encontrada neste filtro"}
           </h3>
           <p style={{ fontSize: 14, color: "#7c8798", margin: "0 0 20px", maxWidth: 460 }}>
-            Crie uma busca com termos comerciais do nicho de locadoras e selecione a cidade desejada.
+            {campaigns.length === 0
+              ? "Crie uma busca com termos comerciais do nicho de locadoras e selecione a cidade desejada."
+              : "Limpe o filtro ou digite outra cidade para visualizar."}
           </p>
-          <button className="fd-btn fd-btn-primary fd-btn-rounded" onClick={() => setShow(true)}>
-            <Plus size={15} />
-            <span>Criar Primeira Busca</span>
-          </button>
+          {campaigns.length === 0 && (
+            <button className="fd-btn fd-btn-primary fd-btn-rounded" onClick={() => setShow(true)}>
+              <Plus size={15} />
+              <span>Criar Primeira Busca</span>
+            </button>
+          )}
         </div>
       ) : (
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(420px, 1fr))", gap: 24 }}>
-          {campaigns.map(c => (
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(380px, 1fr))", gap: 20 }}>
+          {filteredCampaigns.map(c => (
             <article key={c.id} className="fd-card" style={{ marginBottom: 0 }}>
               <div className="fd-card-body" style={{ display: "flex", flexDirection: "column", gap: 16, flex: 1 }}>
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 12 }}>
@@ -277,13 +353,7 @@ export default function CampaignsPanel({ onNotify }: CampaignsPanelProps) {
                       </span>
                       <span>·</span>
                       <Clock3 size={13} />
-                      <span>
-                        {c.intervalHours >= 168
-                          ? "Semanal"
-                          : c.intervalHours === 24
-                            ? "Diária"
-                            : `A cada ${c.intervalHours}h`}
-                      </span>
+                      <span>{formatIntervalLabel(c.intervalHours)}</span>
                       <span>·</span>
                       <span>
                         {c.websiteTarget === "missing"
@@ -294,8 +364,8 @@ export default function CampaignsPanel({ onNotify }: CampaignsPanelProps) {
                       </span>
                     </div>
                   </div>
-                  <span className={`fd-badge-pill ${c.enabled ? "success" : "warning"}`}>
-                    {c.enabled ? "Agendada" : "Pausada"}
+                  <span className={`fd-badge-pill ${c.enabled ? (c.lastSearchedAt ? "primary" : "success") : "warning"}`}>
+                    {!c.enabled ? "Pausada" : c.lastSearchedAt ? "Ativa" : "Na esteira"}
                   </span>
                 </div>
 
@@ -328,7 +398,7 @@ export default function CampaignsPanel({ onNotify }: CampaignsPanelProps) {
                   }}
                 >
                   <div>
-                    <div style={{ fontSize: 12, color: "#7c8798" }}>Resultados novos</div>
+                    <div style={{ fontSize: 12, color: "#7c8798" }}>Qualificados novos</div>
                     <div style={{ fontSize: 15, fontWeight: 500, color: "#1c2d41", marginTop: 2 }}>{c.lastSearchAdded}</div>
                   </div>
                   <div>
@@ -341,7 +411,7 @@ export default function CampaignsPanel({ onNotify }: CampaignsPanelProps) {
                             hour: "2-digit",
                             minute: "2-digit",
                           })
-                        : "Ainda não executada"}
+                        : "Aguardando dia na fila"}
                     </div>
                   </div>
                   <div>
@@ -354,7 +424,7 @@ export default function CampaignsPanel({ onNotify }: CampaignsPanelProps) {
                         marginTop: 4,
                       }}
                     >
-                      {c.lastSearchStatus ? statusLabel[c.lastSearchStatus] || c.lastSearchStatus : "Aguardando"}
+                      {c.lastSearchStatus ? statusLabel[c.lastSearchStatus] || c.lastSearchStatus : "Pronta"}
                     </div>
                   </div>
                 </div>
@@ -395,7 +465,7 @@ export default function CampaignsPanel({ onNotify }: CampaignsPanelProps) {
 
       <div style={{ marginTop: 22, textAlign: "center", fontSize: 13, color: "#7c8798", display: "flex", alignItems: "center", justifyContent: "center", gap: 8 }}>
         <Target size={14} />
-        <span>Busca automática no Google Maps com limite de até 200 empresas por execução.</span>
+        <span>Busca automática no Google Maps com filtro mínimo de qualidade (nota 4,0 e 5 avaliações).</span>
       </div>
 
       {/* Modal Nova Busca */}
@@ -492,7 +562,7 @@ export default function CampaignsPanel({ onNotify }: CampaignsPanelProps) {
                     Presença de site
                   </label>
                   <select className="fd-input" value={form.websiteTarget} onChange={e => setForm({ ...form, websiteTarget: e.target.value })}>
-                    <option value="missing">Somente sem site informado</option>
+                    <option value="missing">Somente sem site próprio</option>
                     <option value="any">Qualquer empresa</option>
                     <option value="present">Somente com site</option>
                   </select>
@@ -502,10 +572,9 @@ export default function CampaignsPanel({ onNotify }: CampaignsPanelProps) {
                     Frequência automática
                   </label>
                   <select className="fd-input" value={form.intervalHours} onChange={e => setForm({ ...form, intervalHours: Number(e.target.value) })}>
-                    <option value={24}>Uma vez ao dia</option>
+                    <option value={720}>Uma vez por mês (30 dias)</option>
                     <option value={168}>Uma vez por semana</option>
-                    <option value={12}>A cada 12 horas</option>
-                    <option value={6}>A cada 6 horas</option>
+                    <option value={24}>Uma vez ao dia</option>
                   </select>
                 </div>
               </div>
@@ -525,4 +594,3 @@ export default function CampaignsPanel({ onNotify }: CampaignsPanelProps) {
     </div>
   );
 }
-

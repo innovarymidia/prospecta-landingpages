@@ -13,6 +13,8 @@ import {
   LogOut,
   MapPin,
   MessageSquare,
+  Pause,
+  Play,
   Plus,
   RefreshCw,
   Search,
@@ -107,6 +109,7 @@ export default function Home() {
   const [loading, setLoading] = useState(false);
 
   const [systemStatus, setSystemStatus] = useState<SystemStatus | null>(null);
+  const [togglingMessaging, setTogglingMessaging] = useState(false);
 
   // Chat slide over drawer
   const [selectedLeadId, setSelectedLeadId] = useState<string | null>(null);
@@ -123,6 +126,29 @@ export default function Home() {
   function notify(s: string) {
     setToast(s);
     setTimeout(() => setToast(""), 4500);
+  }
+
+  async function toggleMessagingEnabled(nextValue: boolean) {
+    setTogglingMessaging(true);
+    try {
+      const res = await fetch("/api/system/status", {
+        method: "PATCH",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ messagingEnabled: nextValue }),
+      });
+      if (!res.ok) throw new Error("Falha ao alterar envios");
+      const data = await res.json();
+      setSystemStatus(prev => (prev ? { ...prev, automationEnabled: Boolean(data.automationEnabled) } : prev));
+      notify(
+        data.automationEnabled
+          ? "Envios de WhatsApp retomados! Captura de leads continua ativa."
+          : "Envios de WhatsApp pausados. A captura de leads no Maps continua normalmente."
+      );
+    } catch (err) {
+      notify(err instanceof Error ? err.message : "Erro ao alterar envios");
+    } finally {
+      setTogglingMessaging(false);
+    }
   }
 
   function navigateView(view: ActiveView, nextStage?: string) {
@@ -752,23 +778,50 @@ export default function Home() {
               className={`fd-badge-pill ${
                 !systemStatus
                   ? "warning"
-                  : !systemStatus.automationEnabled
-                    ? "warning"
-                    : systemStatus.whatsapp?.connected
-                      ? "success"
-                      : "danger"
+                  : systemStatus.whatsapp?.connected
+                    ? "success"
+                    : "danger"
               }`}
               style={{ fontSize: 12 }}
               title={systemStatus?.whatsapp?.error || "Estado real da conexão com o WhatsApp"}
             >
               {!systemStatus
                 ? "Verificando WhatsApp..."
-                : !systemStatus.automationEnabled
-                  ? "Envios Pausados no Servidor"
-                  : systemStatus.whatsapp?.connected
-                    ? "WhatsApp Conectado"
-                    : "WhatsApp Desconectado"}
+                : systemStatus.whatsapp?.connected
+                  ? "WhatsApp Conectado"
+                  : "WhatsApp Desconectado"}
             </span>
+
+            {systemStatus && (
+              <button
+                type="button"
+                disabled={togglingMessaging}
+                onClick={() => toggleMessagingEnabled(!systemStatus.automationEnabled)}
+                className={`fd-btn fd-btn-sm fd-btn-rounded ${systemStatus.automationEnabled ? "" : "fd-btn-primary"}`}
+                style={{
+                  height: 30,
+                  padding: "0 12px",
+                  fontSize: 12,
+                  borderColor: systemStatus.automationEnabled ? "rgba(34, 202, 128, 0.45)" : undefined,
+                  color: systemStatus.automationEnabled ? "#166534" : undefined,
+                  background: systemStatus.automationEnabled ? "rgba(34, 202, 128, 0.12)" : undefined,
+                }}
+                title={
+                  systemStatus.automationEnabled
+                    ? "Pausa somente os envios de mensagem. A captura de leads no Maps continua ativa."
+                    : "Retoma os envios de mensagens no WhatsApp."
+                }
+              >
+                {systemStatus.automationEnabled ? <Pause size={12} /> : <Play size={12} />}
+                <span>
+                  {togglingMessaging
+                    ? "Salvando..."
+                    : systemStatus.automationEnabled
+                      ? "Envios Ativos (Pausar)"
+                      : "Envios Pausados (Retomar)"}
+                </span>
+              </button>
+            )}
           </div>
 
           <div style={{ display: "flex", alignItems: "center", gap: 18 }}>
@@ -991,8 +1044,17 @@ export default function Home() {
                     </div>
                   )}
                   {!systemStatus.automationEnabled && (
-                    <div style={{ fontSize: 13, color: "#4f5467" }}>
-                      Os envios no servidor estão pausados (AUTOMATION_ENABLED diferente de true).
+                    <div style={{ fontSize: 13, color: "#4f5467", display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+                      <span>Os envios de WhatsApp estão pausados pelo painel. As buscas de empresas no Maps continuam rodando normalmente.</span>
+                      <button
+                        type="button"
+                        disabled={togglingMessaging}
+                        onClick={() => toggleMessagingEnabled(true)}
+                        className="fd-btn fd-btn-sm fd-btn-primary fd-btn-rounded"
+                        style={{ height: 26, padding: "0 12px", fontSize: 12 }}
+                      >
+                        Retomar Envios agora
+                      </button>
                     </div>
                   )}
                   {systemStatus.isLocalhostUrl && (

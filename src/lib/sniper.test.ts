@@ -10,8 +10,11 @@ import {
   getLeadGoldScore,
   hasRealWebsite,
   isBotOrPreviewUserAgent,
+  isQualifiedLeadPhone,
+  isQualifiedMapsLead,
   isValidExternalHttpUrl,
   isValidPreviewImage,
+  pickNextQueueCampaignId,
   sortHotLeads,
 } from "./sniper.ts";
 
@@ -102,6 +105,106 @@ test("formatRelativeTimeBr and sortHotLeads highlight recent preview viewers", (
     sorted.map(item => item.id),
     ["newest", "older"]
   );
+});
+
+test("isQualifiedMapsLead filters invalid phones and keeps Instagram-only strong businesses", () => {
+  assert.equal(isQualifiedLeadPhone("5519999999999"), true);
+  assert.equal(isQualifiedLeadPhone("08001234567"), false);
+  assert.equal(isQualifiedLeadPhone("5508001234567"), false);
+  assert.equal(isQualifiedLeadPhone("40031234"), false);
+  assert.equal(isQualifiedLeadPhone("12345"), false);
+
+  assert.equal(
+    isQualifiedMapsLead({
+      name: "Locadora Top",
+      phone: "5519999991111",
+      website: "https://instagram.com/locadoratop",
+      businessStatus: "OPERATIONAL",
+      rating: 4.8,
+      reviewsCount: 18,
+      websiteTarget: "missing",
+    }),
+    true
+  );
+
+  assert.equal(
+    isQualifiedMapsLead({
+      name: "Locadora Com Site",
+      phone: "5519999992222",
+      website: "https://locadoracomsite.com.br",
+      businessStatus: "OPERATIONAL",
+      rating: 4.9,
+      reviewsCount: 50,
+      websiteTarget: "missing",
+    }),
+    false
+  );
+
+  assert.equal(
+    isQualifiedMapsLead({
+      name: "Locadora Poucas Avaliacoes",
+      phone: "5519999993333",
+      website: null,
+      businessStatus: "OPERATIONAL",
+      rating: 4.5,
+      reviewsCount: 2,
+      websiteTarget: "missing",
+    }),
+    false
+  );
+
+  assert.equal(
+    isQualifiedMapsLead({
+      name: "Locadora Nota Baixa",
+      phone: "5519999994444",
+      website: null,
+      businessStatus: "OPERATIONAL",
+      rating: 3.4,
+      reviewsCount: 22,
+      websiteTarget: "missing",
+    }),
+    false
+  );
+});
+
+test("pickNextQueueCampaignId prioritizes never-searched enabled campaigns", () => {
+  const now = new Date("2026-11-10T12:00:00Z");
+  const picked = pickNextQueueCampaignId(
+    [
+      {
+        id: "paused",
+        enabled: false,
+        searchTerms: ["locadora"],
+        location: "Campinas, SP",
+        intervalHours: 720,
+        lastSearchedAt: null,
+        lastSearchRequestedAt: null,
+        lastSearchStatus: null,
+      },
+      {
+        id: "recent",
+        enabled: true,
+        searchTerms: ["locadora"],
+        location: "Sao Paulo, SP",
+        intervalHours: 720,
+        lastSearchedAt: "2026-11-05T10:00:00Z",
+        lastSearchRequestedAt: null,
+        lastSearchStatus: "SUCCESS",
+      },
+      {
+        id: "fresh",
+        enabled: true,
+        searchTerms: ["locadora"],
+        location: "Curitiba, PR",
+        intervalHours: 720,
+        lastSearchedAt: null,
+        lastSearchRequestedAt: null,
+        lastSearchStatus: null,
+      },
+    ],
+    now
+  );
+  assert.equal(picked, "fresh");
 });
 
 test("isBotOrPreviewUserAgent detects WhatsApp link preview crawlers", () => {

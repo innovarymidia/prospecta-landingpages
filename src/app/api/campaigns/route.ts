@@ -11,8 +11,8 @@ const inputSchema = z.object({
   regionCode: z.string().trim().length(2).optional().or(z.literal("")),
   language: z.string().trim().min(2).max(8).default("pt"),
   maxResults: z.number().int().min(1).max(100).default(25),
-  websiteTarget: z.enum(["any", "missing", "present"]).default("any"),
-  intervalHours: z.number().int().min(6).max(720).default(24),
+  websiteTarget: z.enum(["any", "missing", "present"]).default("missing"),
+  intervalHours: z.number().int().min(6).max(720).default(720),
   enabled: z.boolean().default(true),
 });
 export async function GET() {

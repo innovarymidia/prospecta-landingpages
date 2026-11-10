@@ -2,9 +2,10 @@ import { inngest } from "./client";
 import { db } from "@/lib/db";
 import { generateReply } from "@/lib/ai";
 import { sendMedia, sendText } from "@/lib/evolution";
-import { buildTrackedPreviewUrl } from "@/lib/sniper";
+import { buildTrackedPreviewUrl, pickNextQueueCampaignId } from "@/lib/sniper";
 import { importSearchResults, pollSearch, submitSearch } from "@/lib/outscraper";
 import { getInboundBufferSeconds, isLeadBlocked, shouldAiAutoReply } from "@/lib/safety";
+import { getMessagingEnabled } from "@/lib/settings";
 
 const inboundBufferSeconds = getInboundBufferSeconds(process.env.INBOUND_BUFFER_SECONDS);
 
@@ -52,7 +53,10 @@ export const processInbound = inngest.createFunction(
         history,
       };
     });
-    if (!context || process.env.AUTOMATION_ENABLED !== "true") return { skipped: true };
+    const messagingActive = context
+      ? await step.run("check-messaging-enabled", () => getMessagingEnabled())
+      : false;
+    if (!context || !messagingActive) return { skipped: true };
 
     const trackedLink = context.lead.previewUrl
       ? buildTrackedPreviewUrl(context.lead.previewSlug, process.env.APP_URL) || context.lead.previewUrl
@@ -94,12 +98,16 @@ export const sendOutbound = inngest.createFunction(
   async ({ event, step }) => {
     const { leadId, messageId } = event.data as { leadId: string; messageId: string };
     const payload = await step.run("validate-before-send", async () => {
-      const [lead, message] = await Promise.all([db.lead.findUnique({ where: { id: leadId } }), db.message.findUnique({ where: { id: messageId } })]);
+      const [lead, message, messagingActive] = await Promise.all([
+        db.lead.findUnique({ where: { id: leadId } }),
+        db.message.findUnique({ where: { id: messageId } }),
+        getMessagingEnabled(),
+      ]);
+      if (!messagingActive) return null;
       if (!lead || !message || message.direction !== "OUTBOUND" || message.status === "SENT") return null;
       if (lead.optOutAt || ["OPTED_OUT", "BLOCKED"].includes(lead.status) || await db.suppression.findUnique({ where: { phone: lead.phone } })) return null;
       if (message.purpose === "AI_REPLY" && !shouldAiAutoReply(lead)) return null;
       if (message.purpose === "REPLY" && isLeadBlocked(lead)) return null;
-      if (process.env.AUTOMATION_ENABLED !== "true") return null;
       return { phone: lead.phone, body: message.body, mediaUrl: message.mediaUrl, purpose: message.purpose, status: message.status };
     });
     if (!payload) return { skipped: true };
@@ -123,17 +131,50 @@ export const queueDueSearches = inngest.createFunction(
   { id: "prospecta-schedule-searches", retries: 2 },
   { cron: "15 * * * *" },
   async ({ step }) => {
-    const due = await step.run("find-due-search-campaigns", async () => {
-      const campaigns = await db.campaign.findMany({ where: { enabled: true }, take: 100, orderBy: { updatedAt: "asc" } });
-      const now = Date.now();
-      return campaigns.filter(c => c.searchTerms.length > 0 && c.location.trim() && !["QUEUED", "RUNNING"].includes(c.lastSearchStatus || "") && (!c.lastSearchedAt || now - c.lastSearchedAt.getTime() >= c.intervalHours * 60 * 60 * 1000) && (!c.lastSearchRequestedAt || now - c.lastSearchRequestedAt.getTime() >= 5 * 60 * 1000)).map(c => ({ id: c.id }));
+    const nextCampaignId = await step.run("find-next-daily-campaign", async () => {
+      const dailyCutoff = new Date(Date.now() - 23 * 60 * 60 * 1000);
+      const [recentRun, activeCampaign] = await Promise.all([
+        db.searchRun.findFirst({
+          where: { startedAt: { gte: dailyCutoff }, status: { in: ["RUNNING", "SUCCESS"] } },
+          select: { id: true },
+        }),
+        db.campaign.findFirst({
+          where: { lastSearchStatus: { in: ["QUEUED", "RUNNING"] } },
+          select: { id: true },
+        }),
+      ]);
+      if (recentRun || activeCampaign) return null;
+
+      const campaigns = await db.campaign.findMany({
+        where: { enabled: true },
+        take: 250,
+        orderBy: { createdAt: "asc" },
+      });
+      return pickNextQueueCampaignId(campaigns);
     });
-    for (const campaign of due) {
-      const hourSlot = Math.floor(Date.now() / 3_600_000);
-      const claimed = await step.run(`claim-${campaign.id}`, async () => db.campaign.updateMany({ where: { id: campaign.id, enabled: true, OR: [{ lastSearchRequestedAt: null }, { lastSearchRequestedAt: { lt: new Date(Date.now() - 5 * 60 * 1000) } }] }, data: { lastSearchRequestedAt: new Date(), lastSearchStatus: "QUEUED", lastSearchError: null } }));
-      if (claimed.count) await step.sendEvent(`schedule-${campaign.id}`, { id: `search-${campaign.id}-${hourSlot}`, name: "prospecta/search.requested", data: { campaignId: campaign.id, force: false } });
+
+    if (!nextCampaignId) return { queued: 0 };
+
+    const daySlot = Math.floor(Date.now() / (23 * 3_600_000));
+    const claimed = await step.run(`claim-${nextCampaignId}`, async () =>
+      db.campaign.updateMany({
+        where: {
+          id: nextCampaignId,
+          enabled: true,
+          OR: [{ lastSearchRequestedAt: null }, { lastSearchRequestedAt: { lt: new Date(Date.now() - 5 * 60 * 1000) } }],
+        },
+        data: { lastSearchRequestedAt: new Date(), lastSearchStatus: "QUEUED", lastSearchError: null },
+      })
+    );
+    if (claimed.count) {
+      await step.sendEvent(`schedule-${nextCampaignId}`, {
+        id: `search-${nextCampaignId}-${daySlot}`,
+        name: "prospecta/search.requested",
+        data: { campaignId: nextCampaignId, force: false },
+      });
+      return { queued: 1, campaignId: nextCampaignId };
     }
-    return { queued: due.length };
+    return { queued: 0 };
   }
 );
 

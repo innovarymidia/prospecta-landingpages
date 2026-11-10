@@ -3,6 +3,7 @@ import { db } from "@/lib/db";
 import { authorized, unauthorized, sameOrigin } from "@/lib/auth";
 import { inngest } from "@/inngest/client";
 import { isValidPreviewImage } from "@/lib/sniper";
+import { getMessagingEnabled } from "@/lib/settings";
 
 export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   if (!await authorized()) return unauthorized();
@@ -19,8 +20,11 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     return NextResponse.json({ error: "Contato presente na lista de supressão" }, { status: 409 });
   }
 
-  if (process.env.AUTOMATION_ENABLED !== "true") {
-    return NextResponse.json({ error: "Automação e envios estão pausados no servidor" }, { status: 423 });
+  if (!(await getMessagingEnabled())) {
+    return NextResponse.json(
+      { error: "Envios de mensagens estão pausados no painel. Retome os envios para disparar." },
+      { status: 423 }
+    );
   }
 
   const body = await req.json().catch(() => null);

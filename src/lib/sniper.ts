@@ -220,6 +220,97 @@ export function sortHotLeads<T extends { previewViews?: number | null; lastViewe
 }
 
 /**
+ * Valida se o telefone normalizado e util para abordagem comercial no Brasil
+ * (descarta 0800, 0300, 4003, 4004 e numeros curtos invalidos).
+ */
+export function isQualifiedLeadPhone(rawDigits: string): boolean {
+  const digits = (rawDigits || "").replace(/\D/g, "");
+  if (digits.length < 10 || digits.length > 15) return false;
+  const national = digits.length >= 12 && digits.startsWith("55") ? digits.slice(2) : digits;
+  if (national.length < 10) return false;
+  if (/^(0800|0300|0500|0900|4003|4004)/.test(national)) return false;
+  return true;
+}
+
+/**
+ * Avalia se uma empresa retornada pelo Google Maps passa nos criterios minimos
+ * de qualificacao comercial (site alvo, nota >= 4.0 e minimo de 5 avaliacoes).
+ */
+export function isQualifiedMapsLead(input: {
+  name: string;
+  phone: string;
+  website?: string | null;
+  businessStatus?: string | null;
+  rating?: number | null;
+  reviewsCount?: number | null;
+  websiteTarget: string;
+}): boolean {
+  if (!input.name.trim()) return false;
+  if (!isQualifiedLeadPhone(input.phone)) return false;
+
+  const status = (input.businessStatus || "").trim().toUpperCase();
+  if (status && status !== "OPERATIONAL") return false;
+
+  const realSite = hasRealWebsite(input.website);
+  if (input.websiteTarget === "missing" && realSite) return false;
+  if (input.websiteTarget === "present" && !realSite) return false;
+
+  if (typeof input.rating !== "number" || input.rating < 4.0) return false;
+  if (typeof input.reviewsCount !== "number" || input.reviewsCount < 5) return false;
+
+  return true;
+}
+
+/**
+ * Seleciona a proxima campanha elegivel para a esteira diaria (maximo 1 por dia),
+ * priorizando cidades que nunca foram buscadas antes e depois as mais antigas.
+ */
+export function pickNextQueueCampaignId<
+  T extends {
+    id: string;
+    enabled: boolean;
+    searchTerms: string[];
+    location: string;
+    intervalHours: number;
+    lastSearchedAt: Date | string | null;
+    lastSearchRequestedAt: Date | string | null;
+    lastSearchStatus: string | null;
+    createdAt?: Date | string | null;
+  }
+>(campaigns: T[], now: Date = new Date()): string | null {
+  const nowMs = now.getTime();
+  const minRequestGapMs = 5 * 60 * 1000;
+
+  const eligible = campaigns
+    .filter(c => {
+      if (!c.enabled || !c.searchTerms.length || !c.location.trim()) return false;
+      if (["QUEUED", "RUNNING"].includes(c.lastSearchStatus || "")) return false;
+
+      if (c.lastSearchRequestedAt) {
+        const reqMs = new Date(c.lastSearchRequestedAt).getTime();
+        if (nowMs - reqMs < minRequestGapMs) return false;
+      }
+
+      if (!c.lastSearchedAt) return true;
+      const lastMs = new Date(c.lastSearchedAt).getTime();
+      return nowMs - lastMs >= c.intervalHours * 60 * 60 * 1000;
+    })
+    .slice()
+    .sort((a, b) => {
+      if (!a.lastSearchedAt && b.lastSearchedAt) return -1;
+      if (a.lastSearchedAt && !b.lastSearchedAt) return 1;
+      if (a.lastSearchedAt && b.lastSearchedAt) {
+        return new Date(a.lastSearchedAt).getTime() - new Date(b.lastSearchedAt).getTime();
+      }
+      const cA = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+      const cB = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+      return cA - cB;
+    });
+
+  return eligible[0]?.id ?? null;
+}
+
+/**
  * Detecta bots de preview de link (ex.: WhatsApp/Facebook) para evitar contagem falsa de cliques humanos.
  */
 export function isBotOrPreviewUserAgent(userAgent: string | null | undefined): boolean {

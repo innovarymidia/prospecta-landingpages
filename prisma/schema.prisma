@@ -146,3 +146,11 @@ model Suppression {
 
   @@schema("prospeccao_wa")
 }
+
+model SystemSetting {
+  id String @id @default("default")
+  messagingEnabled Boolean @default(true)
+  updatedAt DateTime @updatedAt
+
+  @@schema("prospeccao_wa")
+}

@@ -1,4 +1,5 @@
 import { normalizePhone } from "@/lib/phone";
+import { isQualifiedMapsLead } from "@/lib/sniper";
 type Place = Record<string, unknown>;
 type SearchCampaign = { searchTerms: string[]; location: string; regionCode: string | null; language: string; maxResults: number; websiteTarget: string };
 export type OutscraperRequest = { taskId: string; ready: boolean; failure: boolean };
@@ -86,12 +87,22 @@ export async function importSearchResults(taskId: string, campaignId: string) {
     const name = stringField(item, "name"); const phone = normalizePhone(stringField(item, "phone"));
     const website = stringField(item, "site", "website"); const placeId = stringField(item, "place_id", "google_id");
     const status = stringField(item, "business_status").toUpperCase();
-    if (!name || phone.length < 9 || (status && status !== "OPERATIONAL")) return [];
-    if (campaign.websiteTarget === "missing" && website) return [];
-    if (campaign.websiteTarget === "present" && !website) return [];
     const rating = numberField(item, "rating");
     const reviewsRaw = numberField(item, "reviews", "reviews_count");
     const reviewsCount = reviewsRaw !== null ? Math.max(0, Math.round(reviewsRaw)) : null;
+    if (
+      !isQualifiedMapsLead({
+        name,
+        phone,
+        website,
+        businessStatus: status,
+        rating,
+        reviewsCount,
+        websiteTarget: campaign.websiteTarget,
+      })
+    ) {
+      return [];
+    }
     const hours = hoursField(item);
     return [{ name: name.slice(0, 180), phone, company: name.slice(0, 180), website: website || null, address: stringField(item, "full_address").slice(0, 300) || null, category: stringField(item, "type", "category").slice(0, 120) || null, rating, reviewsCount, hours, providerId: placeId ? `outscraper:${placeId}`.slice(0, 190) : null, source: `Outscraper: ${stringField(item, "query")}`.slice(0, 190), status: "READY" as const }];
   });
