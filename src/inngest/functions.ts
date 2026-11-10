@@ -4,12 +4,18 @@ import { generateReply } from "@/lib/ai";
 import { sendMedia, sendText } from "@/lib/evolution";
 import { buildTrackedPreviewUrl } from "@/lib/sniper";
 import { importSearchResults, pollSearch, submitSearch } from "@/lib/outscraper";
-import { isLeadBlocked } from "@/lib/safety";
+import { getInboundBufferSeconds, isLeadBlocked, shouldAiAutoReply } from "@/lib/safety";
+
+const inboundBufferSeconds = getInboundBufferSeconds(process.env.INBOUND_BUFFER_SECONDS);
 
 export const processInbound = inngest.createFunction(
   {
     id: "prospecta-process-inbound",
-    debounce: { period: `${Math.max(3, Number(process.env.INBOUND_BUFFER_SECONDS || 12))}s`, key: "event.data.leadId", timeout: "60s" },
+    debounce: {
+      period: `${inboundBufferSeconds}s`,
+      key: "event.data.leadId",
+      timeout: `${Math.max(90, inboundBufferSeconds * 2)}s`,
+    },
     concurrency: { limit: 1, key: "event.data.leadId" },
     retries: 4,
   },
@@ -17,13 +23,34 @@ export const processInbound = inngest.createFunction(
   async ({ event, step }) => {
     const { leadId, messageId } = event.data as { leadId: string; messageId: string };
     const context = await step.run("load-authorized-conversation", async () => {
-      const lead = await db.lead.findUnique({ where: { id: leadId }, include: { messages: { orderBy: { createdAt: "desc" }, take: 12 } } });
-      if (!lead || isLeadBlocked(lead)) return null;
+      const lead = await db.lead.findUnique({
+        where: { id: leadId },
+        include: { messages: { orderBy: { createdAt: "desc" }, take: 16 } },
+      });
+      if (!lead || !shouldAiAutoReply(lead)) return null;
       const suppression = await db.suppression.findUnique({ where: { phone: lead.phone } });
       if (suppression) return null;
       const latestInbound = lead.messages.find(m => m.direction === "INBOUND");
       if (!latestInbound || latestInbound.id !== messageId) return null;
-      return { lead: { id: lead.id, name: lead.name, phone: lead.phone, company: lead.company, website: lead.website, rating: lead.rating, reviewsCount: lead.reviewsCount, previewUrl: lead.previewUrl, previewSlug: lead.previewSlug, notes: lead.notes }, incoming: lead.messages.filter(m => m.direction === "INBOUND").map(m => m.body).reverse() };
+      const history = lead.messages
+        .slice()
+        .reverse()
+        .map(m => `${m.direction === "INBOUND" ? "Cliente" : "Consultor"}: ${m.body}`);
+      return {
+        lead: {
+          id: lead.id,
+          name: lead.name,
+          phone: lead.phone,
+          company: lead.company,
+          website: lead.website,
+          rating: lead.rating,
+          reviewsCount: lead.reviewsCount,
+          previewUrl: lead.previewUrl,
+          previewSlug: lead.previewSlug,
+          notes: lead.notes,
+        },
+        history,
+      };
     });
     if (!context || process.env.AUTOMATION_ENABLED !== "true") return { skipped: true };
 
@@ -38,15 +65,17 @@ export const processInbound = inngest.createFunction(
       context.lead.notes,
     ].filter(Boolean).join(" | ");
 
-    const answer = await step.run("draft-contextual-reply", () => generateReply(context.lead.name, contextParts, context.incoming));
+    const answer = await step.run("draft-contextual-reply", () =>
+      generateReply(context.lead.name, contextParts, context.history)
+    );
     const message = await step.run("save-reply-draft", async () => {
       const lead = await db.lead.findUnique({ where: { id: leadId } });
-      if (!lead || isLeadBlocked(lead)) return null;
+      if (!lead || !shouldAiAutoReply(lead)) return null;
       const suppression = await db.suppression.findUnique({ where: { phone: context.lead.phone } });
       if (suppression) return null;
       const latest = await db.message.findFirst({ where: { leadId, direction: "INBOUND" }, orderBy: { createdAt: "desc" } });
       if (!latest || latest.id !== messageId) return null;
-      return db.message.create({ data: { leadId, direction: "OUTBOUND", purpose: "REPLY", status: "QUEUED", body: answer } });
+      return db.message.create({ data: { leadId, direction: "OUTBOUND", purpose: "AI_REPLY", status: "QUEUED", body: answer } });
     });
     if (!message) return { skipped: true };
     await step.sendEvent("queue-reply-for-send", { id: `send-${message.id}`, name: "prospecta/message.send", data: { leadId, messageId: message.id } });
@@ -68,7 +97,8 @@ export const sendOutbound = inngest.createFunction(
       const [lead, message] = await Promise.all([db.lead.findUnique({ where: { id: leadId } }), db.message.findUnique({ where: { id: messageId } })]);
       if (!lead || !message || message.direction !== "OUTBOUND" || message.status === "SENT") return null;
       if (lead.optOutAt || ["OPTED_OUT", "BLOCKED"].includes(lead.status) || await db.suppression.findUnique({ where: { phone: lead.phone } })) return null;
-      if (message.purpose === "REPLY" && !lead.initialSentAt) return null;
+      if (message.purpose === "AI_REPLY" && !shouldAiAutoReply(lead)) return null;
+      if (message.purpose === "REPLY" && isLeadBlocked(lead)) return null;
       if (process.env.AUTOMATION_ENABLED !== "true") return null;
       return { phone: lead.phone, body: message.body, mediaUrl: message.mediaUrl, purpose: message.purpose, status: message.status };
     });

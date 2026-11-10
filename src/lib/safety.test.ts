@@ -1,17 +1,13 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { isLeadBlocked, isOptOutMessage } from "./safety.ts";
+import { getInboundBufferSeconds, isLeadBlocked, isOptOutMessage, shouldAiAutoReply } from "./safety.ts";
 
 test("isLeadBlocked returns true for invalid or blocked leads", () => {
   assert.equal(isLeadBlocked(null), true);
   assert.equal(isLeadBlocked(undefined), true);
-  // No initial message sent yet -> blocked from receiving automated inbound replies
   assert.equal(isLeadBlocked({ initialSentAt: null, optOutAt: null, status: "READY" }), true);
-  // Has opt-out timestamp
   assert.equal(isLeadBlocked({ initialSentAt: new Date(), optOutAt: new Date(), status: "REPLIED" }), true);
-  // Has OPTED_OUT status
   assert.equal(isLeadBlocked({ initialSentAt: new Date(), optOutAt: null, status: "OPTED_OUT" }), true);
-  // Has BLOCKED status
   assert.equal(isLeadBlocked({ initialSentAt: new Date(), optOutAt: null, status: "BLOCKED" }), true);
 });
 
@@ -19,6 +15,28 @@ test("isLeadBlocked returns false for valid active contacted leads", () => {
   assert.equal(isLeadBlocked({ initialSentAt: new Date(), optOutAt: null, status: "SENT" }), false);
   assert.equal(isLeadBlocked({ initialSentAt: new Date(), optOutAt: null, status: "REPLIED" }), false);
   assert.equal(isLeadBlocked({ initialSentAt: new Date(), optOutAt: null, status: "QUALIFIED" }), false);
+});
+
+test("shouldAiAutoReply blocks paused leads and advanced or closed stages", () => {
+  assert.equal(shouldAiAutoReply({ initialSentAt: new Date(), optOutAt: null, aiPausedAt: null, status: "SENT" }), true);
+  assert.equal(shouldAiAutoReply({ initialSentAt: new Date(), optOutAt: null, aiPausedAt: null, status: "REPLIED" }), true);
+
+  assert.equal(shouldAiAutoReply({ initialSentAt: new Date(), optOutAt: null, aiPausedAt: new Date(), status: "REPLIED" }), false);
+  for (const stoppedStatus of ["QUALIFIED", "MEETING", "WON", "LOST", "OPTED_OUT", "BLOCKED"]) {
+    assert.equal(
+      shouldAiAutoReply({ initialSentAt: new Date(), optOutAt: null, aiPausedAt: null, status: stoppedStatus }),
+      false
+    );
+  }
+});
+
+test("getInboundBufferSeconds enforces minimum 30s and defaults to 60s", () => {
+  assert.equal(getInboundBufferSeconds(undefined), 60);
+  assert.equal(getInboundBufferSeconds(""), 60);
+  assert.equal(getInboundBufferSeconds("12"), 30);
+  assert.equal(getInboundBufferSeconds("5"), 30);
+  assert.equal(getInboundBufferSeconds("45"), 45);
+  assert.equal(getInboundBufferSeconds("90"), 90);
 });
 
 test("isOptOutMessage detects opt-out keywords correctly", () => {

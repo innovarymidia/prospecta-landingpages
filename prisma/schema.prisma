@@ -45,6 +45,7 @@ enum MessageStatus {
 enum MessagePurpose {
   INITIAL
   REPLY
+  AI_REPLY
 
   @@schema("prospeccao_wa")
 }
@@ -72,6 +73,7 @@ model Lead {
   initialSentAt DateTime?
   lastMessageAt DateTime?
   optOutAt DateTime?
+  aiPausedAt DateTime?
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
   messages Message[]

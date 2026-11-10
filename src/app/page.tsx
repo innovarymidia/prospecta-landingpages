@@ -389,7 +389,13 @@ export default function Home() {
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Erro ao enfileirar mensagem");
 
-      notify(data.hasMedia ? "Print da prévia e mensagem enviados para a fila!" : "Mensagem enviada para a fila do WhatsApp!");
+      notify(
+        data.aiPaused
+          ? "Mensagem enviada e IA pausada para você assumir este atendimento."
+          : data.hasMedia
+            ? "Print da prévia e mensagem enviados para a fila!"
+            : "Mensagem enviada para a fila do WhatsApp!"
+      );
       setComposerText("");
       setIncludePreviewImage(false);
       const refreshRes = await fetch(`/api/leads/${activeLead.id}`);
@@ -402,6 +408,29 @@ export default function Home() {
       notify(err instanceof Error ? err.message : "Não foi possível enviar a mensagem");
     } finally {
       setSendingMsg(false);
+    }
+  }
+
+  async function toggleAiPause(paused: boolean) {
+    if (!activeLead) return;
+    setUpdatingStatus(true);
+    try {
+      const res = await fetch(`/api/leads/${activeLead.id}`, {
+        method: "PATCH",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ aiPaused: paused }),
+      });
+      if (!res.ok) throw new Error("Falha ao atualizar status da IA");
+      const updated = await res.json();
+      setActiveLead(prev => (prev ? { ...prev, aiPausedAt: updated.aiPausedAt ?? null } : null));
+      setLeads(prev =>
+        prev.map(l => (l.id === activeLead.id ? { ...l, aiPausedAt: updated.aiPausedAt ?? null } : l))
+      );
+      notify(paused ? "IA pausada para este contato." : "IA reativada para este contato.");
+    } catch (err) {
+      notify(err instanceof Error ? err.message : "Erro ao alternar IA");
+    } finally {
+      setUpdatingStatus(false);
     }
   }
 
@@ -565,6 +594,7 @@ export default function Home() {
     sendingMsg,
     onSendMessage: handleSendMessage,
     onPasteImage: handleDrawerPaste,
+    onToggleAiPause: toggleAiPause,
   };
 
   return (

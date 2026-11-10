@@ -13,6 +13,7 @@ import {
   Upload,
   X,
 } from "lucide-react";
+import { AI_STOPPED_STATUSES } from "@/lib/safety";
 import { getFollowUpStage } from "@/lib/sniper";
 
 export type Message = {
@@ -46,6 +47,7 @@ export type Lead = {
   notes?: string | null;
   initialSentAt: string | null;
   lastMessageAt: string | null;
+  aiPausedAt?: string | null;
   createdAt: string;
   messages: Array<{ body: string; createdAt?: string }>;
 };
@@ -101,6 +103,7 @@ type Props = {
   sendingMsg: boolean;
   onSendMessage: (e: React.FormEvent) => void;
   onPasteImage: (e: React.ClipboardEvent) => void;
+  onToggleAiPause?: (paused: boolean) => void;
   onClose?: () => void;
 };
 
@@ -127,6 +130,7 @@ export default function LeadConversationPane({
   sendingMsg,
   onSendMessage,
   onPasteImage,
+  onToggleAiPause,
   onClose,
 }: Props) {
   if (!lead && !loading) {
@@ -475,10 +479,47 @@ export default function LeadConversationPane({
         }}
       >
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
             <span style={{ display: "inline-flex", alignItems: "center", gap: 5, fontSize: 13, fontWeight: 500, color: "#5f76e8" }}>
               <Bot size={15} /> Abordagem Sniper
             </span>
+            {lead && (
+              AI_STOPPED_STATUSES.has(lead.status) ? (
+                <span className={`fd-badge-pill ${["OPTED_OUT", "BLOCKED"].includes(lead.status) ? "danger" : "warning"}`}>
+                  IA desativada neste estágio
+                </span>
+              ) : lead.aiPausedAt ? (
+                <>
+                  <span className="fd-badge-pill warning">IA Pausada</span>
+                  {onToggleAiPause && (
+                    <button
+                      type="button"
+                      className="fd-btn fd-btn-sm fd-btn-rounded"
+                      style={{ height: 24, padding: "0 10px", fontSize: 11 }}
+                      disabled={updatingStatus}
+                      onClick={() => onToggleAiPause(false)}
+                    >
+                      Reativar IA
+                    </button>
+                  )}
+                </>
+              ) : lead.initialSentAt ? (
+                <>
+                  <span className="fd-badge-pill success">IA Ativa</span>
+                  {onToggleAiPause && (
+                    <button
+                      type="button"
+                      className="fd-btn fd-btn-sm fd-btn-rounded"
+                      style={{ height: 24, padding: "0 10px", fontSize: 11 }}
+                      disabled={updatingStatus}
+                      onClick={() => onToggleAiPause(true)}
+                    >
+                      Pausar IA
+                    </button>
+                  )}
+                </>
+              ) : null
+            )}
             {lead?.previewImage && (
               <label style={{ display: "inline-flex", alignItems: "center", gap: 5, fontSize: 12, fontWeight: 500, cursor: "pointer", color: "#1c2d41" }}>
                 <input

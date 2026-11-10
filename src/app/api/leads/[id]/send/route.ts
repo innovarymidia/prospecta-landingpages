@@ -50,11 +50,21 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     },
   });
 
+  if (purpose === "REPLY") {
+    await db.lead.update({
+      where: { id },
+      data: { aiPausedAt: lead.aiPausedAt || new Date() },
+    });
+  }
+
   await inngest.send({
     id: `send-${msg.id}`,
     name: "prospecta/message.send",
     data: { leadId: id, messageId: msg.id },
   });
 
-  return NextResponse.json({ queued: true, messageId: msg.id, purpose, hasMedia: Boolean(candidateMedia) }, { status: 202 });
+  return NextResponse.json(
+    { queued: true, messageId: msg.id, purpose, hasMedia: Boolean(candidateMedia), aiPaused: purpose === "REPLY" },
+    { status: 202 }
+  );
 }

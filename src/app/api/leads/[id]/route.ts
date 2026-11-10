@@ -29,6 +29,7 @@ const updateSchema = z.object({
   previewUrl: z.string().trim().max(500).optional().nullable(),
   previewImage: z.string().trim().max(2_600_000).optional().nullable(),
   notes: z.string().trim().max(2000).optional().nullable(),
+  aiPaused: z.boolean().optional(),
 });
 
 export async function GET(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
@@ -57,42 +58,47 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   const lead = await db.lead.findUnique({ where: { id } });
   if (!lead) return NextResponse.json({ error: "Lead não encontrado" }, { status: 404 });
 
-  const data = parsed.data;
-  if (data.previewUrl !== undefined && data.previewUrl !== null && data.previewUrl !== "" && !isValidExternalHttpUrl(data.previewUrl)) {
+  const { aiPaused, ...leadFields } = parsed.data;
+  if (leadFields.previewUrl !== undefined && leadFields.previewUrl !== null && leadFields.previewUrl !== "" && !isValidExternalHttpUrl(leadFields.previewUrl)) {
     return NextResponse.json({ error: "URL da prévia deve iniciar com http:// ou https://" }, { status: 400 });
   }
-  if (data.previewImage !== undefined && data.previewImage !== null && data.previewImage !== "" && !isValidPreviewImage(data.previewImage)) {
+  if (leadFields.previewImage !== undefined && leadFields.previewImage !== null && leadFields.previewImage !== "" && !isValidPreviewImage(leadFields.previewImage)) {
     return NextResponse.json({ error: "Imagem da prévia inválida ou acima do limite (máx ~1.8MB)" }, { status: 400 });
   }
 
-  if (data.status === "OPTED_OUT") {
+  if (leadFields.status === "OPTED_OUT" || leadFields.status === "BLOCKED") {
+    const reason = leadFields.status === "OPTED_OUT" ? "Opt-out manual no painel" : "Bloqueio manual no painel";
     await db.suppression.upsert({
       where: { phone: lead.phone },
-      create: { phone: lead.phone, reason: "Opt-out manual no painel" },
-      update: { reason: "Opt-out manual no painel" },
+      create: { phone: lead.phone, reason },
+      update: { reason },
     });
   }
 
-  const nextPreviewUrl = data.previewUrl !== undefined ? (data.previewUrl || null) : lead.previewUrl;
+  const nextPreviewUrl = leadFields.previewUrl !== undefined ? (leadFields.previewUrl || null) : lead.previewUrl;
   const nextPreviewSlug =
     nextPreviewUrl && !lead.previewSlug
-      ? generatePreviewSlug(data.company || lead.company || data.name || lead.name, lead.id)
+      ? generatePreviewSlug(leadFields.company || lead.company || leadFields.name || lead.name, lead.id)
       : lead.previewSlug;
 
-  let nextStatus = data.status;
-  if (!nextStatus && data.previewUrl && ["NEW", "READY", "BUILDING"].includes(lead.status)) {
+  let nextStatus = leadFields.status;
+  if (!nextStatus && leadFields.previewUrl && ["NEW", "READY", "BUILDING"].includes(lead.status)) {
     nextStatus = "DEMO_READY";
   }
 
   const updated = await db.lead.update({
     where: { id },
     data: {
-      ...data,
-      previewUrl: data.previewUrl !== undefined ? nextPreviewUrl : undefined,
+      ...leadFields,
+      previewUrl: leadFields.previewUrl !== undefined ? nextPreviewUrl : undefined,
       previewSlug: nextPreviewSlug,
-      previewImage: data.previewImage !== undefined ? (data.previewImage || null) : undefined,
+      previewImage: leadFields.previewImage !== undefined ? (leadFields.previewImage || null) : undefined,
       ...(nextStatus ? { status: nextStatus } : {}),
-      optOutAt: (nextStatus || lead.status) === "OPTED_OUT" ? (lead.optOutAt || new Date()) : lead.optOutAt,
+      optOutAt:
+        (nextStatus || lead.status) === "OPTED_OUT" || (nextStatus || lead.status) === "BLOCKED"
+          ? lead.optOutAt || new Date()
+          : lead.optOutAt,
+      ...(aiPaused !== undefined ? { aiPausedAt: aiPaused ? new Date() : null } : {}),
     },
     include: {
       messages: {

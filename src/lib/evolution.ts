@@ -48,3 +48,39 @@ export async function sendMedia(number: string, caption: string, mediaInput: str
     fileName: `previa-site.${ext}`,
   });
 }
+
+/**
+ * Baixa uma mídia recebida (ex.: áudio do WhatsApp) em base64 na Evolution API v2.
+ */
+export async function getMediaBase64(key: { id: string; remoteJid?: string; fromMe?: boolean }) {
+  const base = process.env.EVOLUTION_API_URL?.replace(/\/$/, "");
+  const instance = process.env.EVOLUTION_INSTANCE;
+  if (!base || !instance || !process.env.EVOLUTION_API_KEY) {
+    return null;
+  }
+
+  try {
+    const response = await fetch(`${base}/chat/getBase64FromMediaMessage/${encodeURIComponent(instance)}`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        apikey: process.env.EVOLUTION_API_KEY,
+      },
+      body: JSON.stringify({
+        message: { key },
+        convertToMp4: false,
+      }),
+      signal: AbortSignal.timeout(12_000),
+    });
+
+    if (!response.ok) return null;
+    const data = (await response.json()) as { base64?: string; mimetype?: string };
+    if (!data?.base64 || typeof data.base64 !== "string") return null;
+    return {
+      base64: data.base64,
+      mimetype: typeof data.mimetype === "string" && data.mimetype ? data.mimetype : "audio/ogg",
+    };
+  } catch {
+    return null;
+  }
+}

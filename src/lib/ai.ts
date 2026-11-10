@@ -91,6 +91,49 @@ Responda EXCLUSIVAMENTE com o texto da mensagem.`;
   }
 }
 
+export function normalizeAudioMimeType(rawMime?: string | null): string {
+  const clean = (rawMime || "").split(";")[0].trim().toLowerCase();
+  if (clean.startsWith("audio/")) return clean;
+  if (clean === "application/ogg") return "audio/ogg";
+  return "audio/ogg";
+}
+
+/**
+ * Transcreve áudios recebidos no WhatsApp utilizando Gemini multimodal.
+ */
+export async function transcribeAudio(base64Input: string, rawMimeType?: string | null): Promise<string | null> {
+  const apiKey = process.env.GEMINI_API_KEY || process.env.GEMINI_WHATSAPP_API_KEY;
+  if (!apiKey || !base64Input.trim()) return null;
+
+  const data = base64Input.replace(/^data:[^;]+;base64,/, "").trim();
+  if (!data) return null;
+
+  try {
+    const model = new GoogleGenerativeAI(apiKey).getGenerativeModel({
+      model: process.env.GEMINI_MODEL || "gemini-2.5-flash",
+    });
+
+    const result = await model.generateContent([
+      {
+        text: "Transcreva fielmente em português brasileiro exatamente o que foi falado neste áudio do WhatsApp. Retorne apenas a transcrição limpa, sem explicações, sem aspas extras, sem caractere e comercial e sem travessões. Se o áudio estiver vazio ou totalmente inaudível, retorne apenas INAUDIVEL.",
+      },
+      {
+        inlineData: {
+          data,
+          mimeType: normalizeAudioMimeType(rawMimeType),
+        },
+      },
+    ]);
+
+    const text = result.response.text().trim();
+    if (!text || /^inaud[ií]vel\.?$/i.test(text)) return null;
+    return text;
+  } catch (err) {
+    console.warn("[AI] Falha ao transcrever áudio no Gemini:", err instanceof Error ? err.message : err);
+    return null;
+  }
+}
+
 /**
  * Conduz a conversa após resposta do cliente ou secretária.
  */
@@ -107,22 +150,24 @@ export async function generateReply(name: string, context: string, messages: str
   const systemInstruction = `Você é um consultor comercial da "${businessName}". Você conversa via WhatsApp com empresas B2B no Brasil (especialmente locadoras de máquinas, equipamentos, andaimes, geradores e serviços de alto ticket).
 
 O QUE VOCÊ OFERECE:
-- Landing Page / Catálogo Profissional focado em gerar pedidos de orçamento no WhatsApp pelo Google.
+- Landing Page e Catálogo Profissional focado em gerar pedidos de orçamento no WhatsApp pelo Google.
 - Carregamento instantâneo no celular, design artesanal sob medida (zero cara de template pronto).
 - Entregue pronta no domínio próprio do cliente ou onde ele preferir hospedar, sem dor de cabeça técnica.
 - Investimento: Pagamento ÚNICO de R$ 1.200 (sem mensalidade presa, sem pegadinha).
-- ROI óbvio para o cliente B2B: 1 única locação/contrato que a página puxar já paga o projeto com folga.
+- ROI óbvio para o cliente B2B: 1 única locação ou contrato que a página puxar já paga o projeto com folga.
 
 COMO CONDUZIR A CONVERSA:
-1. SE FOR ATENDENTE / SECRETÁRIA:
-   - Seja cordial e agradeça pela atenção. Peça o WhatsApp ou e-mail direto do responsável/sócio, ou peça para encaminhar o link da prévia para ele avaliar em 1 minuto.
-2. SE FOR O DONO / GERENTE:
-   - Se ele gostou da prévia ou perguntou preço: explique que a versão completa com fotos reais do pátio/catálogo e publicada no domínio oficial sai por R$ 1.200 pagamento único (sem mensalidade), e ele não precisa perder tempo montando texto ou mexendo em servidor.
+1. SE FOR ATENDENTE OU SECRETÁRIA:
+   - Seja cordial e agradeça pela atenção. Peça o WhatsApp ou e-mail direto do responsável ou sócio, ou peça para encaminhar o link da prévia para ele avaliar em 1 minuto.
+2. SE FOR O DONO OU GERENTE:
+   - Se ele gostou da prévia ou perguntou preço: explique que a versão completa com fotos reais do pátio e catálogo publicada no domínio oficial sai por R$ 1.200 pagamento único (sem mensalidade), e ele não precisa perder tempo montando texto ou mexendo em servidor.
    - Use perguntas curtas de baixo atrito (ex.: "Quer que eu te explique em 2 minutos como colocamos no domínio oficial de vocês?").
-   - Se disser que "já temos site": responda sem confronto que viu o atual, mas que hoje ~80% dos compradores checam pelo celular e páginas antigas/lentas perdem cotações pro concorrente no Google.
+   - Se disser que "já temos site": responda sem confronto que viu o atual, mas que hoje cerca de 80% dos compradores checam pelo celular e páginas antigas ou lentas perdem cotações pro concorrente no Google.
    - Se não tiver interesse: agradeça com elegância e encerre sem insistir.
 
 DIRETRIZES DE ESTILO:
+- Leia todo o histórico entre Cliente e Consultor antes de responder para manter coerência e nunca repetir perguntas já respondidas.
+- Se a última mensagem vier marcada como "[Áudio transcrito]: ...", responda naturalmente ao conteúdo falado pelo cliente sem mencionar transcrição técnica.
 - Máximo de 2 a 4 linhas por mensagem. Linguagem natural de WhatsApp brasileiro.
 - NUNCA use o caractere "e comercial" nem travessões em nenhuma mensagem. Use "e" ou vírgulas normalmente.
 - NUNCA invente funcionalidades não pedidas nem mencione nomes de plataformas de hospedagem internas.
@@ -130,10 +175,10 @@ DIRETRIZES DE ESTILO:
 
   const conversationHistory = `Contexto do lead: ${context || "Nenhum dado extra"}
 Nome cadastrado: ${name}
-Histórico da conversa recente:
-${messages.map((m, idx) => `[Mensagem ${idx + 1}]: ${m}`).join("\n")}
+Histórico recente da conversa (em ordem cronológica):
+${messages.join("\n")}
 
-Responda agora com a melhor mensagem para dar seguimento à conversa de forma persuasiva e natural:`;
+Responda agora à última mensagem do cliente de forma coerente, natural e persuasiva:`;
 
   try {
     const result = await model.generateContent([

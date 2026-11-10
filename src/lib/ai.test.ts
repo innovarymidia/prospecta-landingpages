@@ -1,6 +1,13 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { buildFallbackApproach } from "./ai.ts";
+import { buildFallbackApproach, normalizeAudioMimeType } from "./ai.ts";
+
+test("normalizeAudioMimeType strips codec suffixes and falls back to audio/ogg", () => {
+  assert.equal(normalizeAudioMimeType("audio/ogg; codecs=opus"), "audio/ogg");
+  assert.equal(normalizeAudioMimeType("audio/mpeg"), "audio/mpeg");
+  assert.equal(normalizeAudioMimeType(""), "audio/ogg");
+  assert.equal(normalizeAudioMimeType(null), "audio/ogg");
+});
 
 test("buildFallbackApproach crafts a customized respectful pitch when no preview exists", () => {
   const pitch = buildFallbackApproach({
