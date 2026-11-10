@@ -10,10 +10,12 @@ test("buildApifyRunInput budgets results per term cleanly for free tier", () => 
     regionCode: "BR",
     language: "pt",
     maxResults: 25,
+    websiteTarget: "missing",
   });
 
   assert.equal(input.maxCrawledPlacesPerSearch, 9);
   assert.equal(input.language, "pt-BR");
+  assert.equal(input.website, "withoutWebsite");
   assert.equal(input.skipClosedPlaces, true);
   assert.equal(input.maxReviews, 0);
   assert.equal(input.maxImages, 0);
@@ -60,3 +62,4 @@ test("getActiveSearchProvider prioritizes APIFY_TOKEN, then SERPER_API_KEY, then
   assert.equal(getActiveSearchProvider({ OUTSCRAPER_API_KEY: "out_1" }), "outscraper");
   assert.equal(getActiveSearchProvider({}), null);
 });
+

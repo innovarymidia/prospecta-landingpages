@@ -6,6 +6,7 @@ export interface ApifySearchCampaign {
   regionCode: string | null;
   language: string;
   maxResults: number;
+  websiteTarget?: string;
 }
 
 function readStr(obj: Record<string, unknown>, ...keys: string[]): string {
@@ -37,11 +38,19 @@ export function buildApifyRunInput(campaign: ApifySearchCampaign) {
   const perTerm = Math.max(5, Math.min(25, Math.ceil(campaign.maxResults / termsCount)));
   const lang = campaign.language?.toLowerCase().startsWith("pt") ? "pt-BR" : campaign.language || "pt-BR";
 
+  const websiteFilter =
+    campaign.websiteTarget === "missing"
+      ? "withoutWebsite"
+      : campaign.websiteTarget === "present"
+        ? "withWebsite"
+        : "allPlaces";
+
   return {
     searchStringsArray: campaign.searchTerms,
     locationQuery: campaign.location,
     maxCrawledPlacesPerSearch: perTerm,
     language: lang,
+    website: websiteFilter,
     skipClosedPlaces: true,
     maxReviews: 0,
     maxImages: 0,
@@ -150,3 +159,4 @@ export async function searchApifyCampaign(campaign: ApifySearchCampaign): Promis
 
   return parseApifyPlaces(items, campaign.location);
 }
+
