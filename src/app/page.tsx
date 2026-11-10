@@ -3,31 +3,32 @@
 import { useEffect, useMemo, useState } from "react";
 import {
   Bell,
-  Bot,
   Clock,
-  Copy,
   DollarSign,
-  ExternalLink,
   Eye,
   FilePlus,
   Globe,
   Home as HomeIcon,
-  Image as ImageIcon,
-  Link2,
   LogOut,
   MapPin,
   MessageSquare,
   Plus,
   RefreshCw,
   Search,
-  Send,
   ShieldBan,
   Sparkles,
   Tag,
-  Upload,
   UserPlus,
   X,
 } from "lucide-react";
+import CampaignsPanel from "@/components/CampaignsPanel";
+import LeadConversationPane, {
+  avatarPalette,
+  getInitials,
+  Lead,
+  LeadDetail,
+  statusConfig,
+} from "@/components/LeadConversationPane";
 import {
   buildFollowUpSuggestion,
   buildTrackedPreviewUrl,
@@ -36,44 +37,7 @@ import {
   hasRealWebsite,
 } from "@/lib/sniper";
 
-type Message = {
-  id: string;
-  direction: "INBOUND" | "OUTBOUND";
-  purpose?: string | null;
-  status: "QUEUED" | "SENT" | "DELIVERED" | "FAILED";
-  body: string;
-  mediaUrl?: string | null;
-  createdAt: string;
-};
-
-type Lead = {
-  id: string;
-  name: string;
-  phone: string;
-  company: string | null;
-  website: string | null;
-  address?: string | null;
-  category?: string | null;
-  rating?: number | null;
-  reviewsCount?: number | null;
-  hours?: string | null;
-  previewUrl?: string | null;
-  previewSlug?: string | null;
-  previewImage?: string | null;
-  previewViews?: number;
-  lastViewedAt?: string | null;
-  source: string | null;
-  status: string;
-  notes?: string | null;
-  initialSentAt: string | null;
-  lastMessageAt: string | null;
-  createdAt: string;
-  messages: Array<{ body: string; createdAt?: string }>;
-};
-
-type LeadDetail = Omit<Lead, "messages"> & {
-  messages: Message[];
-};
+type ActiveView = "dashboard" | "pipeline" | "chat" | "campaigns" | "suppressions";
 
 type Suppression = {
   phone: string;
@@ -86,23 +50,6 @@ type SystemStatus = {
   businessName: string;
   businessOffer: string;
 };
-
-const statusConfig: Record<string, { label: string; color: string }> = {
-  NEW: { label: "Novo Lead", color: "#b8c3d5" },
-  READY: { label: "Selecionado", color: "#5f76e8" },
-  BUILDING: { label: "Montando Prévia", color: "#01caf1" },
-  DEMO_READY: { label: "Prévia Pronta", color: "#5f76e8" },
-  SENT: { label: "Prévia Enviada", color: "#fdc16a" },
-  REPLIED: { label: "Respondeu", color: "#22ca80" },
-  QUALIFIED: { label: "Qualificado", color: "#01caf1" },
-  MEETING: { label: "Reunião Marcada", color: "#5f76e8" },
-  WON: { label: "Cliente Fechado", color: "#22ca80" },
-  LOST: { label: "Encerrado", color: "#b8c3d5" },
-  OPTED_OUT: { label: "Opt out", color: "#ff4f70" },
-  BLOCKED: { label: "Bloqueado", color: "#ff4f70" },
-};
-
-const avatarPalette = ["#5f76e8", "#ff4f70", "#01caf1", "#22ca80", "#fdc16a"];
 
 async function compressScreenshotToDataUrl(file: File): Promise<string> {
   const bitmap = await createImageBitmap(file);
@@ -118,16 +65,10 @@ async function compressScreenshotToDataUrl(file: File): Promise<string> {
   return canvas.toDataURL("image/jpeg", 0.82);
 }
 
-function getInitials(label: string): string {
-  const parts = label.trim().split(/\s+/).filter(Boolean);
-  if (parts.length === 0) return "PR";
-  if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
-  return `${parts[0][0]}${parts[1][0]}`.toUpperCase();
-}
-
 export default function Home() {
-  const [activeTab, setActiveTab] = useState<"leads" | "suppressions">("leads");
+  const [activeView, setActiveView] = useState<ActiveView>("dashboard");
   const [stageFilter, setStageFilter] = useState<string>("ALL");
+  const [chatFilter, setChatFilter] = useState<"ALL" | "REPLIED" | "SENT">("ALL");
   const [leads, setLeads] = useState<Lead[]>([]);
   const [suppressions, setSuppressions] = useState<Suppression[]>([]);
   const [query, setQuery] = useState("");
@@ -169,17 +110,43 @@ export default function Home() {
     setTimeout(() => setToast(""), 4500);
   }
 
+  function navigateView(view: ActiveView, nextStage?: string) {
+    setActiveView(view);
+    if (nextStage !== undefined) setStageFilter(nextStage);
+    if (view !== "chat") setSelectedLeadId(null);
+
+    if (typeof window !== "undefined") {
+      const params = new URLSearchParams();
+      if (view !== "dashboard") params.set("view", view);
+      if (view === "pipeline" && nextStage && nextStage !== "ALL") params.set("stage", nextStage);
+      const qs = params.toString();
+      window.history.replaceState(null, "", qs ? `/?${qs}` : "/");
+      window.scrollTo({ top: 0, behavior: "smooth" });
+    }
+  }
+
   useEffect(() => {
     function handleKeyDown(e: KeyboardEvent) {
       if (e.key === "Escape") {
-        if (selectedLeadId) setSelectedLeadId(null);
+        if (selectedLeadId && activeView !== "chat") setSelectedLeadId(null);
         if (showAddModal) setShowAddModal(false);
         if (showAddSuppressionModal) setShowAddSuppressionModal(false);
       }
     }
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [selectedLeadId, showAddModal, showAddSuppressionModal]);
+  }, [activeView, selectedLeadId, showAddModal, showAddSuppressionModal]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const params = new URLSearchParams(window.location.search);
+    const v = params.get("view") as ActiveView | null;
+    const st = params.get("stage");
+    if (v && ["dashboard", "pipeline", "chat", "campaigns", "suppressions"].includes(v)) {
+      setActiveView(v);
+    }
+    if (st) setStageFilter(st);
+  }, []);
 
   async function loadLeads() {
     try {
@@ -216,6 +183,14 @@ export default function Home() {
     }, 20000);
     return () => clearInterval(timer);
   }, []);
+
+  useEffect(() => {
+    if (activeView === "chat" && !selectedLeadId && leads.length > 0) {
+      const preferred =
+        leads.find(l => ["REPLIED", "QUALIFIED", "MEETING", "WON"].includes(l.status)) || leads[0];
+      if (preferred) openConversation(preferred.id);
+    }
+  }, [activeView, leads, selectedLeadId]);
 
   async function openConversation(leadId: string) {
     setSelectedLeadId(leadId);
@@ -549,6 +524,49 @@ export default function Home() {
     });
   }, [leads, query, stageFilter]);
 
+  const chatContacts = useMemo(() => {
+    return leads.filter(l => {
+      const matchesQuery = `${l.name} ${l.company || ""} ${l.phone} ${l.category || ""} ${l.address || ""}`
+        .toLowerCase()
+        .includes(query.toLowerCase());
+      if (!matchesQuery) return false;
+      if (chatFilter === "REPLIED") return ["REPLIED", "QUALIFIED", "MEETING", "WON"].includes(l.status);
+      if (chatFilter === "SENT") return l.status === "SENT" || Boolean(l.initialSentAt);
+      return true;
+    });
+  }, [leads, query, chatFilter]);
+
+  const conversationPaneProps = {
+    lead: activeLead,
+    loading: loadingChat,
+    trackedUrl: getTrackedLink(activeLead),
+    previewUrlInput,
+    onPreviewUrlInputChange: setPreviewUrlInput,
+    savingPreview,
+    onSavePreviewUrl: savePreviewUrl,
+    onCopyTrackedUrl: () => {
+      const link = getTrackedLink(activeLead);
+      if (link) {
+        navigator.clipboard.writeText(link);
+        notify("Link rastreado copiado!");
+      }
+    },
+    onUploadPreviewImage: handlePreviewImageFile,
+    onRemovePreviewImage: removePreviewImage,
+    updatingStatus,
+    onUpdateStatus: updateStatus,
+    generatingDraft,
+    onRequestAiDraft: requestAiDraft,
+    onLoadFollowUp: loadFollowUp,
+    composerText,
+    onComposerTextChange: setComposerText,
+    includePreviewImage,
+    onIncludePreviewImageChange: setIncludePreviewImage,
+    sendingMsg,
+    onSendMessage: handleSendMessage,
+    onPasteImage: handleDrawerPaste,
+  };
+
   return (
     <div className="fd-main-wrapper">
       {/* Toast */}
@@ -579,7 +597,14 @@ export default function Home() {
       {/* Topbar Header (Exact FreeDash 80px Fixed Header) */}
       <header className="fd-topbar">
         <div className="fd-navbar-header">
-          <a href="/" className="fd-navbar-brand">
+          <a
+            href="/"
+            onClick={e => {
+              e.preventDefault();
+              navigateView("dashboard", "ALL");
+            }}
+            className="fd-navbar-brand"
+          >
             <svg width="32" height="32" viewBox="0 0 36 44" fill="none" xmlns="http://www.w3.org/2000/svg">
               <path
                 d="M8.94981 23.8836C17.1535 22.0444 21.8606 18.63 23.1886 17.1527C25.1125 19.7791 23.5006 24.7713 22.4542 26.9391C19.9436 30.6278 9.57181 33.6852 9.35294 33.8456C5.33665 36.9488 9.0603 41.9613 9.23039 42.1733C9.23088 42.1734 9.23137 42.1735 9.23186 42.1737C9.23842 42.1826 9.23765 42.1823 9.23039 42.1733C5.05462 41.0619 2.48669 36.4087 1.72464 34.2207C0.0360044 28.059 5.83782 24.7619 8.94981 23.8836Z"
@@ -601,7 +626,7 @@ export default function Home() {
             <button
               className="fd-btn"
               style={{ border: 0, background: "transparent", padding: "0 6px", position: "relative" }}
-              onClick={() => setStageFilter(followUpCount > 0 ? "FOLLOWUP" : "ALL")}
+              onClick={() => navigateView("pipeline", followUpCount > 0 ? "FOLLOWUP" : "ALL")}
               title="Pendências de Follow up e Views"
             >
               <Bell size={20} style={{ color: "#7c8798" }} />
@@ -616,10 +641,7 @@ export default function Home() {
             <select
               className="fd-pill-select"
               value={stageFilter}
-              onChange={e => {
-                setActiveTab("leads");
-                setStageFilter(e.target.value);
-              }}
+              onChange={e => navigateView("pipeline", e.target.value)}
               aria-label="Filtro rápido de etapa"
             >
               <option value="ALL">Todas as Etapas</option>
@@ -684,13 +706,11 @@ export default function Home() {
       <aside className="fd-left-sidebar">
         <nav className="fd-sidebar-nav">
           <ul className="fd-sidebar-ul">
-            <li className={`fd-sidebar-item ${activeTab === "leads" && stageFilter === "ALL" ? "selected" : ""}`}>
+            <li className={`fd-sidebar-item ${activeView === "dashboard" ? "selected" : ""}`}>
               <button
+                type="button"
                 className="fd-sidebar-link"
-                onClick={() => {
-                  setActiveTab("leads");
-                  setStageFilter("ALL");
-                }}
+                onClick={() => navigateView("dashboard", "ALL")}
               >
                 <HomeIcon />
                 <span className="fd-hide-menu">Dashboard</span>
@@ -702,13 +722,11 @@ export default function Home() {
               <span className="fd-hide-menu">Prospecção</span>
             </li>
 
-            <li className={`fd-sidebar-item ${activeTab === "leads" && stageFilter === "GOLD" ? "selected" : ""}`}>
+            <li className={`fd-sidebar-item ${activeView === "pipeline" && stageFilter === "GOLD" ? "selected" : ""}`}>
               <button
+                type="button"
                 className="fd-sidebar-link"
-                onClick={() => {
-                  setActiveTab("leads");
-                  setStageFilter("GOLD");
-                }}
+                onClick={() => navigateView("pipeline", "GOLD")}
               >
                 <Tag />
                 <span className="fd-hide-menu">Leads Ouro</span>
@@ -716,13 +734,11 @@ export default function Home() {
               </button>
             </li>
 
-            <li className={`fd-sidebar-item ${activeTab === "leads" && stageFilter === "DEMO" ? "selected" : ""}`}>
+            <li className={`fd-sidebar-item ${activeView === "pipeline" && stageFilter === "DEMO" ? "selected" : ""}`}>
               <button
+                type="button"
                 className="fd-sidebar-link"
-                onClick={() => {
-                  setActiveTab("leads");
-                  setStageFilter("DEMO");
-                }}
+                onClick={() => navigateView("pipeline", "DEMO")}
               >
                 <Eye />
                 <span className="fd-hide-menu">Prévias Prontas</span>
@@ -730,13 +746,11 @@ export default function Home() {
               </button>
             </li>
 
-            <li className={`fd-sidebar-item ${activeTab === "leads" && stageFilter === "FOLLOWUP" ? "selected" : ""}`}>
+            <li className={`fd-sidebar-item ${activeView === "pipeline" && stageFilter === "FOLLOWUP" ? "selected" : ""}`}>
               <button
+                type="button"
                 className="fd-sidebar-link"
-                onClick={() => {
-                  setActiveTab("leads");
-                  setStageFilter("FOLLOWUP");
-                }}
+                onClick={() => navigateView("pipeline", "FOLLOWUP")}
               >
                 <Clock />
                 <span className="fd-hide-menu">Follow up 2d e 5d</span>
@@ -744,13 +758,11 @@ export default function Home() {
               </button>
             </li>
 
-            <li className={`fd-sidebar-item ${activeTab === "leads" && stageFilter === "REPLIED" ? "selected" : ""}`}>
+            <li className={`fd-sidebar-item ${activeView === "chat" ? "selected" : ""}`}>
               <button
+                type="button"
                 className="fd-sidebar-link"
-                onClick={() => {
-                  setActiveTab("leads");
-                  setStageFilter("REPLIED");
-                }}
+                onClick={() => navigateView("chat")}
               >
                 <MessageSquare />
                 <span className="fd-hide-menu">Chat WhatsApp</span>
@@ -763,15 +775,23 @@ export default function Home() {
               <span className="fd-hide-menu">Captação</span>
             </li>
 
-            <li className="fd-sidebar-item">
-              <a className="fd-sidebar-link" href="/campaigns">
+            <li className={`fd-sidebar-item ${activeView === "campaigns" ? "selected" : ""}`}>
+              <button
+                type="button"
+                className="fd-sidebar-link"
+                onClick={() => navigateView("campaigns")}
+              >
                 <MapPin />
                 <span className="fd-hide-menu">Buscas no Maps</span>
-              </a>
+              </button>
             </li>
 
-            <li className={`fd-sidebar-item ${activeTab === "suppressions" ? "selected" : ""}`}>
-              <button className="fd-sidebar-link" onClick={() => setActiveTab("suppressions")}>
+            <li className={`fd-sidebar-item ${activeView === "suppressions" ? "selected" : ""}`}>
+              <button
+                type="button"
+                className="fd-sidebar-link"
+                onClick={() => navigateView("suppressions")}
+              >
                 <ShieldBan />
                 <span className="fd-hide-menu">Supressão</span>
                 <span className="fd-nav-pill-count">{suppressions.length}</span>
@@ -785,6 +805,7 @@ export default function Home() {
 
             <li className="fd-sidebar-item">
               <button
+                type="button"
                 className="fd-sidebar-link"
                 onClick={async () => {
                   await fetch("/api/auth/logout", { method: "POST" });
@@ -805,20 +826,54 @@ export default function Home() {
         <div className="fd-page-breadcrumb">
           <div>
             <h3 className="fd-page-title">
-              {activeTab === "leads" ? "Bom dia, Operação Locadoras B2B!" : "Lista de Supressão"}
+              {activeView === "dashboard"
+                ? "Bom dia, Operação Locadoras B2B!"
+                : activeView === "pipeline"
+                  ? stageFilter === "GOLD"
+                    ? "Leads Ouro sem Site"
+                    : stageFilter === "DEMO"
+                      ? "Prévias Prontas"
+                      : stageFilter === "FOLLOWUP"
+                        ? "Follow up 2d e 5d"
+                        : "Pipeline de Prospecção"
+                  : activeView === "chat"
+                    ? "Chat WhatsApp"
+                    : activeView === "campaigns"
+                      ? "Buscas no Maps e Campanhas"
+                      : "Lista de Supressão"}
             </h3>
             <div className="fd-breadcrumb">
-              <span>Dashboard</span>
+              <span>
+                {activeView === "dashboard"
+                  ? "Dashboard"
+                  : activeView === "pipeline" || activeView === "chat"
+                    ? "Prospecção"
+                    : "Captação"}
+              </span>
               <span>/</span>
-              <span>{activeTab === "leads" ? "Prospecção WhatsApp" : "Bloqueios"}</span>
+              <span>
+                {activeView === "dashboard"
+                  ? "Visão Geral"
+                  : activeView === "pipeline"
+                    ? "Pipeline"
+                    : activeView === "chat"
+                      ? "Atendimento WhatsApp"
+                      : activeView === "campaigns"
+                        ? "Campanhas"
+                        : "Bloqueios"}
+              </span>
             </div>
           </div>
 
           <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-            <a href="/campaigns" className="fd-btn fd-btn-rounded">
+            <button
+              type="button"
+              onClick={() => navigateView("campaigns")}
+              className={`fd-btn fd-btn-rounded ${activeView === "campaigns" ? "fd-btn-primary" : ""}`}
+            >
               <MapPin size={15} />
               <span>Buscas Maps</span>
-            </a>
+            </button>
             <button className="fd-btn fd-btn-primary fd-btn-rounded" onClick={() => setShowAddModal(true)}>
               <Plus size={15} />
               <span>Novo Lead</span>
@@ -828,7 +883,7 @@ export default function Home() {
 
         {/* Main Fluid Container */}
         <div className="fd-container-fluid">
-          {activeTab === "leads" ? (
+          {activeView === "dashboard" && (
             <>
               {/* Row 1: FreeDash 4 KPI Group */}
               <div className="fd-kpi-row">
@@ -1144,19 +1199,30 @@ export default function Home() {
                         <p style={{ fontSize: 13, color: "#7c8798", margin: "0 0 6px" }}>
                           Monitoramento de 60 segundos ativo no Render para manter sessões sempre prontas.
                         </p>
-                        <a
-                          href="/campaigns"
-                          style={{ fontSize: 13, color: "#01caf1", borderBottom: "1px solid #01caf1", paddingBottom: 2 }}
+                        <button
+                          type="button"
+                          onClick={() => navigateView("campaigns")}
+                          style={{
+                            fontSize: 13,
+                            color: "#01caf1",
+                            border: 0,
+                            borderBottom: "1px solid #01caf1",
+                            padding: "0 0 2px",
+                            background: "transparent",
+                            cursor: "pointer",
+                          }}
                         >
                           Gerenciar buscas no Maps
-                        </a>
+                        </button>
                       </div>
                     </div>
                   </div>
                 </div>
               </div>
+            </>
+          )}
 
-              {/* Row 4: Pipeline Table (FreeDash Top Leaders Style) */}
+          {(activeView === "dashboard" || activeView === "pipeline") && (
               <div className="fd-card">
                 <div className="fd-card-body">
                   <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 14, marginBottom: 18 }}>
@@ -1204,7 +1270,7 @@ export default function Home() {
                             </td>
                           </tr>
                         ) : (
-                          filtered.slice(0, 20).map((l, idx) => {
+                          filtered.slice(0, activeView === "pipeline" ? 100 : 20).map((l, idx) => {
                             const conf = statusConfig[l.status] || { label: l.status, color: "#b8c3d5" };
                             const gold = getLeadGoldScore(l);
                             const followUp = getFollowUpStage(l);
@@ -1276,9 +1342,110 @@ export default function Home() {
                   </div>
                 </div>
               </div>
-            </>
-          ) : (
-            /* Aba Supressão */
+          )}
+
+          {activeView === "chat" && (
+            <div className="fd-chat-workspace">
+              <div className="fd-chat-contacts">
+                <div style={{ padding: "16px 16px 12px", borderBottom: "1px solid #edf2f9" }}>
+                  <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10 }}>
+                    <h4 className="fd-card-title" style={{ margin: 0, fontSize: 16 }}>Conversas</h4>
+                    <span className="fd-badge-pill primary">{chatContacts.length}</span>
+                  </div>
+                  <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                    {[
+                      { id: "ALL", label: "Todos" },
+                      { id: "REPLIED", label: "Respondeu" },
+                      { id: "SENT", label: "Enviados" },
+                    ].map(f => (
+                      <button
+                        key={f.id}
+                        type="button"
+                        onClick={() => setChatFilter(f.id as "ALL" | "REPLIED" | "SENT")}
+                        className={`fd-btn fd-btn-sm fd-btn-rounded ${chatFilter === f.id ? "fd-btn-primary" : ""}`}
+                      >
+                        {f.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                <div style={{ flex: 1, overflowY: "auto" }}>
+                  {chatContacts.length === 0 ? (
+                    <div style={{ padding: 28, textAlign: "center", fontSize: 13, color: "#7c8798" }}>
+                      Nenhuma empresa encontrada neste filtro.
+                    </div>
+                  ) : (
+                    chatContacts.map((l, idx) => {
+                      const displayName = l.company || l.name;
+                      const conf = statusConfig[l.status] || { label: l.status, color: "#b8c3d5" };
+                      const lastMsg = l.messages?.[0]?.body;
+                      return (
+                        <button
+                          key={l.id}
+                          type="button"
+                          onClick={() => openConversation(l.id)}
+                          className={`fd-chat-contact-item ${selectedLeadId === l.id ? "active" : ""}`}
+                        >
+                          <span
+                            className="fd-avatar-circle"
+                            style={{ background: avatarPalette[idx % avatarPalette.length], width: 40, height: 40, fontSize: 13 }}
+                          >
+                            {getInitials(displayName)}
+                          </span>
+                          <div style={{ flex: 1, minWidth: 0 }}>
+                            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 6 }}>
+                              <span
+                                style={{
+                                  fontSize: 14,
+                                  fontWeight: 500,
+                                  color: "#1c2d41",
+                                  overflow: "hidden",
+                                  textOverflow: "ellipsis",
+                                  whiteSpace: "nowrap",
+                                }}
+                              >
+                                {displayName}
+                              </span>
+                              <span className="fd-status-dot" style={{ background: conf.color, flexShrink: 0 }} title={conf.label} />
+                            </div>
+                            <div
+                              style={{
+                                fontSize: 12,
+                                color: "#7c8798",
+                                overflow: "hidden",
+                                textOverflow: "ellipsis",
+                                whiteSpace: "nowrap",
+                                marginTop: 3,
+                              }}
+                            >
+                              {lastMsg || l.phone}
+                            </div>
+                            <div style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 4 }}>
+                              <span style={{ fontSize: 11, color: "#7c8798" }}>{conf.label}</span>
+                              {(l.previewViews ?? 0) > 0 && (
+                                <span className="fd-badge-pill primary" style={{ fontSize: 10, padding: "1px 6px" }}>
+                                  {l.previewViews} views
+                                </span>
+                              )}
+                            </div>
+                          </div>
+                        </button>
+                      );
+                    })
+                  )}
+                </div>
+              </div>
+
+              <div className="fd-chat-pane">
+                <LeadConversationPane {...conversationPaneProps} />
+              </div>
+            </div>
+          )}
+
+          {activeView === "campaigns" && <CampaignsPanel onNotify={notify} />}
+
+          {activeView === "suppressions" && (
             <div className="fd-card">
               <div className="fd-card-body">
                 <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 20 }}>
@@ -1333,245 +1500,13 @@ export default function Home() {
       </div>
 
       {/* Offcanvas Drawer WhatsApp e Prévia Sniper */}
-      {selectedLeadId && (() => {
-        const trackedUrl = getTrackedLink(activeLead);
-        const followUp = activeLead ? getFollowUpStage(activeLead) : { due: false as const, daysSinceSent: 0 };
-
-        return (
-          <div className="fd-drawer-backdrop" onClick={() => setSelectedLeadId(null)}>
-            <div className="fd-drawer" onClick={e => e.stopPropagation()} onPaste={handleDrawerPaste}>
-              <div style={{ padding: "18px 22px", borderBottom: "1px solid #edf2f9", display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12 }}>
-                <div style={{ minWidth: 0 }}>
-                  <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                    <h3 style={{ fontSize: 17, fontWeight: 500, color: "#1c2d41", margin: 0 }}>
-                      {activeLead?.company || activeLead?.name}
-                    </h3>
-                    <a
-                      href={`https://wa.me/${activeLead?.phone?.replace(/\D/g, "")}`}
-                      target="_blank"
-                      rel="noreferrer"
-                      style={{ color: "#5f76e8", display: "inline-flex" }}
-                      title="Abrir no WhatsApp Oficial"
-                    >
-                      <ExternalLink size={15} />
-                    </a>
-                  </div>
-                  <div style={{ fontSize: 12, color: "#7c8798", marginTop: 3, display: "flex", gap: 8, flexWrap: "wrap" }}>
-                    <span>{activeLead?.phone}</span>
-                    {activeLead?.category && <span>· {activeLead.category}</span>}
-                    {typeof activeLead?.rating === "number" && (
-                      <span style={{ color: "#fb8c00", fontWeight: 500 }}>
-                        ★ {activeLead.rating.toFixed(1)} ({activeLead.reviewsCount ?? 0})
-                      </span>
-                    )}
-                  </div>
-                </div>
-
-                <div style={{ display: "flex", alignItems: "center", gap: 8, flexShrink: 0 }}>
-                  <select
-                    value={activeLead?.status || "READY"}
-                    onChange={e => updateStatus(e.target.value)}
-                    disabled={updatingStatus}
-                    className="fd-input"
-                    style={{ width: "auto", fontSize: 13, padding: "6px 10px" }}
-                  >
-                    {Object.entries(statusConfig).map(([k, v]) => (
-                      <option key={k} value={k}>{v.label}</option>
-                    ))}
-                  </select>
-
-                  <button onClick={() => setSelectedLeadId(null)} className="fd-btn fd-btn-sm" style={{ padding: "0 8px" }}>
-                    <X size={16} />
-                  </button>
-                </div>
-              </div>
-
-              {/* Bloco Prévia Manual e Print */}
-              {activeLead && (
-                <div style={{ padding: "14px 22px", background: "#f9fbfd", borderBottom: "1px solid #edf2f9", display: "flex", flexDirection: "column", gap: 10 }}>
-                  <form onSubmit={savePreviewUrl} style={{ display: "flex", gap: 8, alignItems: "center" }}>
-                    <div style={{ position: "relative", flex: 1 }}>
-                      <Link2 size={14} style={{ position: "absolute", left: 10, top: "50%", transform: "translateY(-50%)", color: "#5f76e8" }} />
-                      <input
-                        className="fd-input"
-                        style={{ paddingLeft: 32, fontSize: 13 }}
-                        value={previewUrlInput}
-                        onChange={e => setPreviewUrlInput(e.target.value)}
-                        placeholder="Cole aqui o link externo da prévia manual (https://...)"
-                      />
-                    </div>
-                    <button type="submit" className="fd-btn fd-btn-primary fd-btn-sm" disabled={savingPreview}>
-                      {savingPreview ? "..." : "Salvar Prévia"}
-                    </button>
-                  </form>
-
-                  <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, flexWrap: "wrap" }}>
-                    {trackedUrl ? (
-                      <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", fontSize: 12 }}>
-                        <span className="fd-badge-pill primary">
-                          <Eye size={11} style={{ marginRight: 4 }} /> {activeLead.previewViews ?? 0} {activeLead.previewViews === 1 ? "clique" : "cliques"}
-                        </span>
-                        <button
-                          type="button"
-                          className="fd-btn fd-btn-sm"
-                          style={{ height: 26, padding: "0 10px" }}
-                          onClick={() => {
-                            navigator.clipboard.writeText(trackedUrl);
-                            notify("Link rastreado copiado!");
-                          }}
-                        >
-                          <Copy size={11} /> Copiar /v/{activeLead.previewSlug}
-                        </button>
-                        <a href={trackedUrl} target="_blank" rel="noreferrer" style={{ color: "#5f76e8", fontSize: 12, fontWeight: 500, display: "inline-flex", alignItems: "center", gap: 3 }}>
-                          Testar <ExternalLink size={11} />
-                        </a>
-                      </div>
-                    ) : (
-                      <span style={{ fontSize: 12, color: "#7c8798" }}>
-                        Salve a URL da prévia manual para gerar o link rastreado <code>/v/slug</code>.
-                      </span>
-                    )}
-
-                    <div>
-                      {activeLead.previewImage ? (
-                        <div style={{ display: "flex", alignItems: "center", gap: 6, background: "#ffffff", border: "1px solid #e9ecef", borderRadius: 4, padding: "3px 8px" }}>
-                          <img src={activeLead.previewImage} alt="Print da prévia" style={{ width: 28, height: 20, objectFit: "cover", borderRadius: 2 }} />
-                          <span style={{ fontSize: 12, fontWeight: 500, color: "#22ca80" }}>Print pronto</span>
-                          <button type="button" onClick={removePreviewImage} style={{ border: 0, background: "transparent", cursor: "pointer", color: "#7c8798", padding: 0, display: "grid", placeItems: "center" }}>
-                            <X size={13} />
-                          </button>
-                        </div>
-                      ) : (
-                        <label className="fd-btn fd-btn-sm" style={{ height: 28, borderStyle: "dashed", cursor: "pointer" }} title="Ou dê Ctrl+V em um print capturado!">
-                          <Upload size={12} />
-                          <span>Anexar Print ou Ctrl+V</span>
-                          <input
-                            type="file"
-                            accept="image/png,image/jpeg,image/webp"
-                            style={{ display: "none" }}
-                            onChange={e => {
-                              const file = e.target.files?.[0];
-                              if (file) handlePreviewImageFile(file);
-                              e.target.value = "";
-                            }}
-                          />
-                        </label>
-                      )}
-                    </div>
-                  </div>
-                </div>
-              )}
-
-              {/* Alerta Follow up */}
-              {followUp.due && (
-                <div style={{ padding: "10px 22px", background: "rgba(253, 193, 106, 0.25)", borderBottom: "1px solid #edf2f9", display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10 }}>
-                  <span style={{ fontSize: 12, fontWeight: 500, color: "#1c2d41" }}>
-                    Sem resposta há {followUp.daysSinceSent} dias, toque recomendado ({followUp.due === "DAY_5" ? "Dia 5" : "Dia 2"})
-                  </span>
-                  <button
-                    type="button"
-                    className="fd-btn fd-btn-sm fd-btn-dark"
-                    onClick={() => loadFollowUp(followUp.due as "DAY_2" | "DAY_5")}
-                  >
-                    Carregar Follow up
-                  </button>
-                </div>
-              )}
-
-              {/* Chat Bubbles */}
-              <div style={{ flex: 1, overflowY: "auto", padding: "18px 22px", display: "flex", flexDirection: "column", gap: 12 }}>
-                {loadingChat ? (
-                  <div style={{ textAlign: "center", padding: 40, color: "#7c8798", fontSize: 14 }}>
-                    Carregando conversa...
-                  </div>
-                ) : activeLead?.messages?.length === 0 ? (
-                  <div style={{ padding: 24, background: "#f9fbfd", borderRadius: 4, border: "1px dashed #dee2e6", textAlign: "center" }}>
-                    <div style={{ fontWeight: 500, fontSize: 15, color: "#1c2d41", marginBottom: 4 }}>
-                      {activeLead.previewUrl ? "Prévia pronta para envio direto!" : "Nenhuma mensagem enviada ainda"}
-                    </div>
-                    <p style={{ fontSize: 13, color: "#7c8798", margin: "0 0 14px" }}>
-                      {activeLead.previewUrl
-                        ? "Gere a mensagem direta já com o link rastreado e o print da página."
-                        : "Cole o link da prévia acima e opcionalmente o print para gerar a abordagem direta."}
-                    </p>
-                    <button className="fd-btn fd-btn-primary fd-btn-rounded fd-btn-sm" onClick={requestAiDraft} disabled={generatingDraft}>
-                      <Sparkles size={13} />
-                      <span>{generatingDraft ? "Gerando..." : "Gerar Abordagem Direta"}</span>
-                    </button>
-                  </div>
-                ) : (
-                  activeLead?.messages?.map(msg => (
-                    <div key={msg.id} className={msg.direction === "OUTBOUND" ? "fd-chat-outbound" : "fd-chat-inbound"}>
-                      {msg.mediaUrl && (
-                        <img
-                          src={msg.mediaUrl}
-                          alt="Print enviado"
-                          style={{ width: "100%", maxHeight: 200, objectFit: "cover", borderRadius: 4, marginBottom: 8, display: "block" }}
-                        />
-                      )}
-                      <div style={{ whiteSpace: "pre-wrap" }}>{msg.body}</div>
-                      <div style={{ fontSize: 10, color: "#7c8798", marginTop: 4, textAlign: "right" }}>
-                        {new Date(msg.createdAt).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}
-                        {msg.direction === "OUTBOUND" && ` · ${msg.status}`}
-                      </div>
-                    </div>
-                  ))
-                )}
-              </div>
-
-              {/* Composer */}
-              <div style={{ padding: "14px 22px", borderTop: "1px solid #edf2f9", background: "#f9fbfd", display: "flex", flexDirection: "column", gap: 10 }}>
-                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
-                  <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-                    <span style={{ display: "inline-flex", alignItems: "center", gap: 5, fontSize: 13, fontWeight: 500, color: "#5f76e8" }}>
-                      <Bot size={15} /> Abordagem Sniper
-                    </span>
-                    {activeLead?.previewImage && (
-                      <label style={{ display: "inline-flex", alignItems: "center", gap: 5, fontSize: 12, fontWeight: 500, cursor: "pointer", color: "#1c2d41" }}>
-                        <input
-                          type="checkbox"
-                          checked={includePreviewImage}
-                          onChange={e => setIncludePreviewImage(e.target.checked)}
-                          style={{ accentColor: "#5f76e8" }}
-                        />
-                        <ImageIcon size={13} />
-                        <span>Enviar print junto</span>
-                      </label>
-                    )}
-                  </div>
-
-                  <button type="button" className="fd-btn fd-btn-sm fd-btn-rounded" onClick={requestAiDraft} disabled={generatingDraft}>
-                    <Sparkles size={12} style={{ color: "#5f76e8" }} />
-                    {generatingDraft ? "Gerando..." : "Sugerir Pitch Direto"}
-                  </button>
-                </div>
-
-                <form onSubmit={handleSendMessage} style={{ display: "flex", gap: 8, alignItems: "flex-end" }}>
-                  <textarea
-                    className="fd-textarea"
-                    rows={3}
-                    value={composerText}
-                    onChange={e => setComposerText(e.target.value)}
-                    onKeyDown={e => {
-                      if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) handleSendMessage(e);
-                    }}
-                    placeholder="Digite a mensagem do WhatsApp (Ctrl+Enter para enviar)..."
-                  />
-                  <button
-                    type="submit"
-                    className="fd-btn fd-btn-primary fd-btn-rounded"
-                    style={{ height: 40, padding: "0 18px", flexShrink: 0 }}
-                    disabled={sendingMsg || !composerText.trim()}
-                  >
-                    <Send size={14} />
-                    <span>{sendingMsg ? "..." : "Enviar"}</span>
-                  </button>
-                </form>
-              </div>
-            </div>
+      {selectedLeadId && activeView !== "chat" && (
+        <div className="fd-drawer-backdrop" onClick={() => setSelectedLeadId(null)}>
+          <div className="fd-drawer" onClick={e => e.stopPropagation()}>
+            <LeadConversationPane {...conversationPaneProps} onClose={() => setSelectedLeadId(null)} />
           </div>
-        );
-      })()}
+        </div>
+      )}
 
       {/* Modal Add Lead */}
       {showAddModal && (
