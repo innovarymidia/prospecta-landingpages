@@ -1,6 +1,13 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { getInboundBufferSeconds, isLeadBlocked, isOptOutMessage, shouldAiAutoReply } from "./safety.ts";
+import {
+  getInboundBufferSeconds,
+  isLeadBlocked,
+  isOptOutMessage,
+  isOutboundSystemEcho,
+  reopenedLeadStatus,
+  shouldAiAutoReply,
+} from "./safety.ts";
 
 test("isLeadBlocked returns true for invalid or blocked leads", () => {
   assert.equal(isLeadBlocked(null), true);
@@ -50,4 +57,19 @@ test("isOptOutMessage detects opt-out keywords correctly", () => {
   assert.equal(isOptOutMessage("Olá, como funciona o serviço?"), false);
   assert.equal(isOptOutMessage("Pode me ligar amanhã?"), false);
   assert.equal(isOptOutMessage(""), false);
+});
+
+test("reopenedLeadStatus restores REPLIED when initialSentAt exists or READY otherwise", () => {
+  assert.equal(reopenedLeadStatus(new Date()), "REPLIED");
+  assert.equal(reopenedLeadStatus(null), "READY");
+});
+
+test("isOutboundSystemEcho matches by externalId or recent identical body", () => {
+  const recents = [
+    { externalId: "msg-sys-1", body: "Oi, tudo bem?" },
+    { externalId: null, body: "Segue o link da prévia" },
+  ];
+  assert.equal(isOutboundSystemEcho("Qualquer texto", "msg-sys-1", recents), true);
+  assert.equal(isOutboundSystemEcho("Segue o link da prévia ", undefined, recents), true);
+  assert.equal(isOutboundSystemEcho("Mensagem digitada no celular", "msg-cel-99", recents), false);
 });

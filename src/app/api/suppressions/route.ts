@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { db } from "@/lib/db";
 import { authorized, unauthorized, sameOrigin } from "@/lib/auth";
-import { normalizePhone } from "@/lib/phone";
+import { buildPhoneMatchVariants, normalizePhone } from "@/lib/phone";
 
 const schema = z.object({
   phone: z.string().min(8).max(25),
@@ -26,18 +26,17 @@ export async function POST(req: NextRequest) {
   if (!parsed.success) return NextResponse.json({ error: parsed.error.issues }, { status: 400 });
 
   const phone = normalizePhone(parsed.data.phone);
+  const variants = buildPhoneMatchVariants(phone);
   const suppression = await db.suppression.upsert({
     where: { phone },
     create: { phone, reason: parsed.data.reason },
     update: { reason: parsed.data.reason },
   });
 
-  // Se o lead existir, marca como OPTED_OUT
   await db.lead.updateMany({
-    where: { phone },
+    where: { phone: { in: variants } },
     data: { status: "OPTED_OUT", optOutAt: new Date() },
   });
 
   return NextResponse.json(suppression, { status: 201 });
 }
-

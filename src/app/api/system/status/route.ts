@@ -17,7 +17,6 @@ export async function GET(req: NextRequest) {
   return NextResponse.json({
     automationEnabled: messagingEnabled,
     businessName: process.env.BUSINESS_NAME || "Sua empresa",
-    businessOffer: process.env.BUSINESS_OFFER || "Serviços profissionais",
     whatsapp,
     publicAppUrl,
     isLocalhostUrl,

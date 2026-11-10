@@ -3,6 +3,7 @@ import { SignJWT } from "jose";
 import bcrypt from "bcryptjs";
 import { Redis } from "@upstash/redis";
 import { Ratelimit } from "@upstash/ratelimit";
+import { db } from "@/lib/db";
 import { sameOrigin, SESSION_COOKIE } from "@/lib/auth";
 import { sanitizeHash } from "@/lib/auth-helpers";
 
@@ -21,11 +22,10 @@ const limiter = process.env.UPSTASH_REDIS_REST_URL && process.env.UPSTASH_REDIS_
 
 async function checkAllowed(ip: string): Promise<boolean> {
   if (limiter) return (await limiter.limit(ip)).success;
-  if (process.env.NODE_ENV === "production") return false;
   const now = Date.now();
   const record = memoryAttempts.get(ip);
   if (!record || record.expires < now) return true;
-  return record.count < 20;
+  return record.count < 10;
 }
 
 function recordFailure(ip: string) {
@@ -33,7 +33,7 @@ function recordFailure(ip: string) {
   const now = Date.now();
   const record = memoryAttempts.get(ip);
   if (!record || record.expires < now) {
-    memoryAttempts.set(ip, { count: 1, expires: now + 300_000 });
+    memoryAttempts.set(ip, { count: 1, expires: now + 600_000 });
   } else {
     record.count++;
   }
@@ -63,25 +63,39 @@ export async function POST(req: NextRequest) {
   }
 
   const { email, password } = body as { email?: unknown; password?: unknown };
-  const adminEmail = process.env.ADMIN_EMAIL?.trim().toLowerCase().replace(/^["']|["']$/g, "");
-  const passwordHash = sanitizeHash(process.env.ADMIN_PASSWORD_HASH);
+  const suppliedEmail = typeof email === "string" ? email.trim().toLowerCase() : "";
+  const suppliedPassword = typeof password === "string" ? password : "";
 
-  if (!adminEmail || !passwordHash || !process.env.AUTH_SECRET || process.env.AUTH_SECRET.length < 32) {
-    return NextResponse.json({ error: "Login ainda não configurado no servidor (.env incompleto)" }, { status: 503 });
+  if (!process.env.AUTH_SECRET || process.env.AUTH_SECRET.length < 32) {
+    return NextResponse.json({ error: "AUTH_SECRET não configurado corretamente no servidor" }, { status: 503 });
   }
 
-  const emailOk = typeof email === "string" && email.trim().toLowerCase() === adminEmail;
-  const passwordOk = typeof password === "string" && password.length > 0 && password.length <= 200 && await bcrypt.compare(password, passwordHash).catch(() => false);
-
-  if (!emailOk || !passwordOk) {
+  if (!suppliedEmail || suppliedPassword.length === 0 || suppliedPassword.length > 200) {
     recordFailure(ip);
     return NextResponse.json({ error: "E-mail ou senha incorretos" }, { status: 401 });
   }
 
-  // Login com sucesso: limpa contador de tentativas
+  const dbUser = await db.adminUser.findUnique({ where: { email: suppliedEmail } }).catch(() => null);
+  const envEmail = process.env.ADMIN_EMAIL?.trim().toLowerCase().replace(/^["']|["']$/g, "");
+  const envHash = sanitizeHash(process.env.ADMIN_PASSWORD_HASH);
+
+  let authenticated = false;
+  if (dbUser) {
+    authenticated = await bcrypt.compare(suppliedPassword, dbUser.passwordHash).catch(() => false);
+  } else if (envEmail && envHash && suppliedEmail === envEmail) {
+    authenticated = await bcrypt.compare(suppliedPassword, envHash).catch(() => false);
+  } else if (!envEmail || !envHash) {
+    return NextResponse.json({ error: "Nenhum usuário administrador configurado no servidor" }, { status: 503 });
+  }
+
+  if (!authenticated) {
+    recordFailure(ip);
+    return NextResponse.json({ error: "E-mail ou senha incorretos" }, { status: 401 });
+  }
+
   clearAttempts(ip);
 
-  const token = await new SignJWT({ role: "admin", sub: adminEmail })
+  const token = await new SignJWT({ role: "admin", sub: suppliedEmail })
     .setProtectedHeader({ alg: "HS256" })
     .setIssuedAt()
     .setExpirationTime("8h")

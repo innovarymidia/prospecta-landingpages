@@ -32,11 +32,6 @@ export default function LoginPage() {
     }
   }
 
-  function fillDevCredentials() {
-    setEmail("admin@prospecta.local");
-    setPassword("admin123456");
-  }
-
   return (
     <main className="login-page">
       <div className="login-auth-box">
@@ -63,7 +58,7 @@ export default function LoginPage() {
                 required
                 value={email}
                 onChange={e => setEmail(e.target.value)}
-                placeholder="admin@prospecta.local"
+                placeholder="seu@email.com"
               />
             </div>
 
@@ -85,24 +80,6 @@ export default function LoginPage() {
 
             <button className="login-submit" disabled={busy}>
               {busy ? "Verificando…" : "Entrar no painel"}
-            </button>
-
-            <button
-              type="button"
-              onClick={fillDevCredentials}
-              style={{
-                marginTop: 10,
-                width: "100%",
-                padding: "7px 10px",
-                background: "none",
-                border: "1px dashed #ced4da",
-                borderRadius: 2,
-                fontSize: 12,
-                color: "#7c8798",
-                cursor: "pointer",
-              }}
-            >
-              Preencher credenciais padrão locais
             </button>
           </form>
 

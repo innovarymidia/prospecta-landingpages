@@ -2,17 +2,14 @@
 
 import { useEffect, useMemo, useState } from "react";
 import {
-  AlertTriangle,
   Bell,
   Building2,
-  DollarSign,
-  Eye,
-  FilePlus,
-  Globe,
   Home as HomeIcon,
   LogOut,
   MapPin,
+  Menu,
   MessageSquare,
+  Moon,
   Pause,
   Play,
   Plus,
@@ -20,10 +17,11 @@ import {
   Search,
   ShieldBan,
   Sparkles,
-  UserPlus,
+  Sun,
   X,
 } from "lucide-react";
 import CampaignsPanel from "@/components/CampaignsPanel";
+import DashboardOverview, { SystemStatus } from "@/components/DashboardOverview";
 import LeadConversationPane, {
   avatarPalette,
   getInitials,
@@ -31,11 +29,11 @@ import LeadConversationPane, {
   LeadDetail,
   statusConfig,
 } from "@/components/LeadConversationPane";
+import { buildFallbackApproach } from "@/lib/ai";
 import {
   buildFollowUpSuggestion,
   buildTrackedPreviewUrl,
   extractRegionLabel,
-  formatRelativeTimeBr,
   getFollowUpStage,
   getLeadGoldScore,
   hasRealWebsite,
@@ -48,22 +46,6 @@ type Suppression = {
   phone: string;
   reason: string;
   createdAt: string;
-};
-
-type SystemStatus = {
-  automationEnabled: boolean;
-  businessName: string;
-  businessOffer: string;
-  whatsapp?: {
-    configured: boolean;
-    connected: boolean;
-    state: string;
-    error?: string;
-  };
-  publicAppUrl?: string;
-  isLocalhostUrl?: boolean;
-  aiConfigured?: boolean;
-  searchConfigured?: boolean;
 };
 
 async function compressScreenshotToDataUrl(file: File): Promise<string> {
@@ -86,6 +68,10 @@ export default function Home() {
   const [chatFilter, setChatFilter] = useState<"ALL" | "WAIT_HUMAN" | "REPLIED" | "SENT">("ALL");
   const [priorityTab, setPriorityTab] = useState<"HOT" | "HUMAN" | "FOLLOWUP">("HOT");
   const [visibleCount, setVisibleCount] = useState<number>(25);
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [mobileChatActive, setMobileChatActive] = useState(false);
+  const [theme, setTheme] = useState<"light" | "dark">("light");
+
   const [leads, setLeads] = useState<Lead[]>([]);
   const [suppressions, setSuppressions] = useState<Suppression[]>([]);
   const [query, setQuery] = useState("");
@@ -111,7 +97,6 @@ export default function Home() {
   const [systemStatus, setSystemStatus] = useState<SystemStatus | null>(null);
   const [togglingMessaging, setTogglingMessaging] = useState(false);
 
-  // Chat slide over drawer
   const [selectedLeadId, setSelectedLeadId] = useState<string | null>(null);
   const [activeLead, setActiveLead] = useState<LeadDetail | null>(null);
   const [loadingChat, setLoadingChat] = useState(false);
@@ -126,6 +111,20 @@ export default function Home() {
   function notify(s: string) {
     setToast(s);
     setTimeout(() => setToast(""), 4500);
+  }
+
+  useEffect(() => {
+    const current = document.documentElement.dataset.theme === "dark" ? "dark" : "light";
+    setTheme(current);
+  }, []);
+
+  function toggleTheme() {
+    const next = theme === "dark" ? "light" : "dark";
+    setTheme(next);
+    document.documentElement.dataset.theme = next;
+    try {
+      localStorage.setItem("prospecta_theme", next);
+    } catch {}
   }
 
   async function toggleMessagingEnabled(nextValue: boolean) {
@@ -155,7 +154,11 @@ export default function Home() {
     setActiveView(view);
     if (nextStage !== undefined) setStageFilter(nextStage);
     setVisibleCount(25);
-    if (view !== "chat") setSelectedLeadId(null);
+    setMobileMenuOpen(false);
+    if (view !== "chat") {
+      setSelectedLeadId(null);
+      setMobileChatActive(false);
+    }
 
     if (typeof window !== "undefined") {
       const params = new URLSearchParams();
@@ -170,6 +173,7 @@ export default function Home() {
   useEffect(() => {
     function handleKeyDown(e: KeyboardEvent) {
       if (e.key === "Escape") {
+        if (mobileMenuOpen) setMobileMenuOpen(false);
         if (selectedLeadId && activeView !== "chat") setSelectedLeadId(null);
         if (showAddModal) setShowAddModal(false);
         if (showAddSuppressionModal) setShowAddSuppressionModal(false);
@@ -177,7 +181,7 @@ export default function Home() {
     }
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [activeView, selectedLeadId, showAddModal, showAddSuppressionModal]);
+  }, [activeView, mobileMenuOpen, selectedLeadId, showAddModal, showAddSuppressionModal]);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -197,7 +201,7 @@ export default function Home() {
         location.assign("/login");
         return;
       }
-      if (!r.ok) throw new Error("Erro ao carregar leads");
+      if (!r.ok) throw new Error("Erro ao carregar empresas");
       setLeads(await r.json());
     } catch {}
   }
@@ -233,12 +237,13 @@ export default function Home() {
         leads.find(l => Boolean(l.aiPausedAt) && !["WON", "LOST", "OPTED_OUT", "BLOCKED"].includes(l.status)) ||
         leads.find(l => ["REPLIED", "QUALIFIED", "MEETING", "WON"].includes(l.status)) ||
         leads[0];
-      if (preferred) openConversation(preferred.id);
+      if (preferred) openConversation(preferred.id, false);
     }
   }, [activeView, leads, selectedLeadId]);
 
-  async function openConversation(leadId: string) {
+  async function openConversation(leadId: string, activateMobileChat = true) {
     setSelectedLeadId(leadId);
+    if (activateMobileChat) setMobileChatActive(true);
     setLoadingChat(true);
     setComposerText("");
     try {
@@ -251,6 +256,7 @@ export default function Home() {
     } catch (e) {
       notify(e instanceof Error ? e.message : "Erro ao abrir conversa");
       setSelectedLeadId(null);
+      setMobileChatActive(false);
     } finally {
       setLoadingChat(false);
     }
@@ -258,8 +264,8 @@ export default function Home() {
 
   function getTrackedLink(lead: { previewSlug?: string | null; previewUrl?: string | null } | null | undefined) {
     if (!lead?.previewUrl) return null;
-    const origin = typeof window !== "undefined" ? window.location.origin : "";
-    return buildTrackedPreviewUrl(lead.previewSlug, origin) || lead.previewUrl;
+    const baseOrigin = systemStatus?.publicAppUrl || (typeof window !== "undefined" ? window.location.origin : "");
+    return buildTrackedPreviewUrl(lead.previewSlug, baseOrigin) || lead.previewUrl;
   }
 
   async function savePreviewUrl(e?: React.FormEvent) {
@@ -273,7 +279,7 @@ export default function Home() {
         body: JSON.stringify({ previewUrl: previewUrlInput.trim() || null }),
       });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Falha ao salvar URL da prévia");
+      if (!res.ok) throw new Error(data.error || "Falha ao salvar link da prévia");
       setActiveLead(prev =>
         prev ? { ...prev, previewUrl: data.previewUrl, previewSlug: data.previewSlug, status: data.status } : null
       );
@@ -284,7 +290,7 @@ export default function Home() {
             : l
         )
       );
-      notify(data.previewUrl ? "Prévia salva e link rastreado gerado!" : "Link da prévia removido.");
+      notify(data.previewUrl ? "Link salvo e contador de cliques ativado!" : "Link da prévia removido.");
     } catch (err) {
       notify(err instanceof Error ? err.message : "Erro ao salvar prévia");
     } finally {
@@ -303,13 +309,13 @@ export default function Home() {
         body: JSON.stringify({ previewImage: dataUrl }),
       });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Falha ao salvar print da prévia");
+      if (!res.ok) throw new Error(data.error || "Falha ao salvar foto da prévia");
       setActiveLead(prev => (prev ? { ...prev, previewImage: data.previewImage } : null));
       setLeads(prev => prev.map(l => (l.id === activeLead.id ? { ...l, previewImage: data.previewImage } : l)));
       setIncludePreviewImage(true);
-      notify("Print da prévia anexado! Pronto para enviar no WhatsApp.");
+      notify("Foto da prévia anexada!");
     } catch (err) {
-      notify(err instanceof Error ? err.message : "Erro ao processar print");
+      notify(err instanceof Error ? err.message : "Erro ao processar foto");
     } finally {
       setSavingPreview(false);
     }
@@ -324,13 +330,13 @@ export default function Home() {
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ previewImage: null }),
       });
-      if (!res.ok) throw new Error("Falha ao remover print");
+      if (!res.ok) throw new Error("Falha ao remover foto");
       setActiveLead(prev => (prev ? { ...prev, previewImage: null } : null));
       setLeads(prev => prev.map(l => (l.id === activeLead.id ? { ...l, previewImage: null } : l)));
       setIncludePreviewImage(false);
-      notify("Print removido.");
+      notify("Foto removida.");
     } catch (err) {
-      notify(err instanceof Error ? err.message : "Erro ao remover print");
+      notify(err instanceof Error ? err.message : "Erro ao remover foto");
     } finally {
       setSavingPreview(false);
     }
@@ -362,15 +368,15 @@ export default function Home() {
       });
       if (!res.ok) {
         const err = await res.json().catch(() => ({}));
-        throw new Error(err.error || "Falha ao alterar status");
+        throw new Error(err.error || "Falha ao alterar etapa");
       }
       const updated = await res.json();
-      setActiveLead(prev => prev ? { ...prev, status: updated.status } : null);
+      setActiveLead(prev => prev ? { ...prev, status: updated.status, optOutAt: updated.optOutAt } : null);
       setLeads(prev => prev.map(l => l.id === activeLead.id ? { ...l, status: updated.status } : l));
-      notify(`Status atualizado para "${statusConfig[newStatus]?.label || newStatus}"`);
-      if (newStatus === "OPTED_OUT") loadSuppressions();
+      notify(`Etapa atualizada para "${statusConfig[newStatus]?.shortLabel || newStatus}"`);
+      if (newStatus === "OPTED_OUT" || newStatus === "BLOCKED") loadSuppressions();
     } catch (e) {
-      notify(e instanceof Error ? e.message : "Falha ao atualizar status");
+      notify(e instanceof Error ? e.message : "Falha ao atualizar etapa");
     } finally {
       setUpdatingStatus(false);
     }
@@ -385,7 +391,7 @@ export default function Home() {
         const data = await res.json();
         if (data.draft) {
           setComposerText(data.draft);
-          notify("Abordagem Sniper gerada pela IA!");
+          notify("Mensagem criada pela IA!");
           return;
         }
       }
@@ -399,13 +405,17 @@ export default function Home() {
 
   function applyApproachTemplate() {
     if (!activeLead) return;
-    const company = activeLead.company?.trim() || activeLead.name.trim();
-    const link = getTrackedLink(activeLead);
-    const template = link
-      ? `Oi, tudo bem? É da ${company}? Notei que vocês ainda não têm uma página própria focada em pedidos de orçamento no WhatsApp e montei uma prévia real de como ficaria o site de vocês funcionando no celular: ${link}\n\nSe puder encaminhar para o responsável dar uma olhada sem compromisso, acredito que ajuda bastante a evitar equipamento parado e puxar cotações no Google.`
-      : `Oi, tudo bem? É da ${company}? Uma dúvida rápida: quem aí cuida da parte de novos orçamentos pelo site e WhatsApp? É por este número mesmo?`;
-    setComposerText(template);
-    notify("Abordagem rápida carregada!");
+    const tracked = getTrackedLink(activeLead);
+    setComposerText(
+      buildFallbackApproach({
+        name: activeLead.name,
+        company: activeLead.company,
+        rating: activeLead.rating,
+        previewUrl: activeLead.previewUrl,
+        trackedPreviewUrl: tracked,
+      })
+    );
+    notify("Mensagem padrão carregada!");
   }
 
   function loadFollowUp(stage: "DAY_2" | "DAY_5") {
@@ -414,7 +424,7 @@ export default function Home() {
     const link = getTrackedLink(activeLead);
     setComposerText(buildFollowUpSuggestion(company, stage, link));
     setIncludePreviewImage(false);
-    notify(stage === "DAY_5" ? "Follow up de encerramento (Dia 5) carregado!" : "Follow up de utilidade (Dia 2) carregado!");
+    notify(stage === "DAY_5" ? "Mensagem de retorno (5 dias) carregada!" : "Mensagem de retorno (2 dias) carregada!");
   }
 
   async function handleSendMessage(e: React.FormEvent) {
@@ -432,13 +442,13 @@ export default function Home() {
         }),
       });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Erro ao enfileirar mensagem");
+      if (!res.ok) throw new Error(data.error || "Erro ao enviar mensagem");
 
       notify(
         data.aiPaused
           ? "Mensagem enviada e IA pausada para você assumir este atendimento."
           : data.hasMedia
-            ? "Print da prévia e mensagem enviados para a fila!"
+            ? "Foto da prévia e mensagem enviadas para a fila!"
             : "Mensagem enviada para a fila do WhatsApp!"
       );
       setComposerText("");
@@ -502,15 +512,15 @@ export default function Home() {
       });
       if (!res.ok) {
         const err = await res.json().catch(() => ({}));
-        throw new Error(err.error || "Falha ao adicionar supressão");
+        throw new Error(err.error || "Falha ao bloquear número");
       }
       setShowAddSuppressionModal(false);
       setSuppressionForm({ phone: "", reason: "Solicitação manual de bloqueio" });
-      notify("Número adicionado à lista de supressão.");
+      notify("Número adicionado à lista de bloqueios.");
       loadSuppressions();
       loadLeads();
     } catch (e) {
-      notify(e instanceof Error ? e.message : "Erro ao suprimir número");
+      notify(e instanceof Error ? e.message : "Erro ao bloquear número");
     } finally {
       setLoading(false);
     }
@@ -555,7 +565,7 @@ export default function Home() {
         source: "Cadastro manual",
         notes: "",
       });
-      notify("Lead cadastrado com sucesso!");
+      notify("Empresa cadastrada com sucesso!");
     } catch (e) {
       notify(e instanceof Error ? e.message : "Não foi possível salvar");
     } finally {
@@ -563,7 +573,6 @@ export default function Home() {
     }
   }
 
-  // Métricas 100% Reais do Banco
   const totalLeads = leads.length;
   const noRealSiteCount = leads.filter(l => !hasRealWebsite(l.website)).length;
   const goldCount = leads.filter(l => getLeadGoldScore(l).isGold).length;
@@ -614,16 +623,6 @@ export default function Home() {
         pct: totalLeads > 0 ? Math.round((count / totalLeads) * 100) : 0,
       }));
   }, [leads, totalLeads]);
-
-  const funnelSteps = [
-    { label: "Empresas cadastradas", count: totalLeads, color: "#5f76e8" },
-    { label: "Sem site próprio", count: noRealSiteCount, color: "#01caf1" },
-    { label: "Com prévia pronta", count: demoCount, color: "#5f76e8" },
-    { label: "Abordagem enviada", count: sentCount, color: "#fdc16a" },
-    { label: "Clicaram no link", count: viewedLeadsCount, color: "#22ca80" },
-    { label: "Responderam", count: repliedCount, color: "#22ca80" },
-    { label: "Vendas fechadas", count: wonCount, color: "#1c2d41" },
-  ];
 
   const filtered = useMemo(() => {
     return leads.filter(l => {
@@ -680,7 +679,7 @@ export default function Home() {
       const link = getTrackedLink(activeLead);
       if (link) {
         navigator.clipboard.writeText(link);
-        notify("Link rastreado copiado!");
+        notify("Link copiado com rastreio!");
       }
     },
     onUploadPreviewImage: handlePreviewImageFile,
@@ -707,29 +706,40 @@ export default function Home() {
         <div
           style={{
             position: "fixed",
-            bottom: 24,
-            right: 24,
+            bottom: 20,
+            right: 20,
+            left: "auto",
+            maxWidth: "calc(100vw - 40px)",
             background: "#1c2d41",
             color: "#ffffff",
             padding: "12px 18px",
             borderRadius: 60,
             fontWeight: 500,
             fontSize: 13,
-            boxShadow: "0 10px 25px rgba(28, 45, 65, 0.25)",
+            boxShadow: "0 10px 25px rgba(0, 0, 0, 0.35)",
             zIndex: 9999,
             display: "flex",
             alignItems: "center",
             gap: 8,
           }}
         >
-          <Sparkles size={15} style={{ color: "#01caf1" }} />
-          {toast}
+          <Sparkles size={15} style={{ color: "#01caf1", flexShrink: 0 }} />
+          <span>{toast}</span>
         </div>
       )}
 
       {/* Topbar Header */}
       <header className="fd-topbar">
         <div className="fd-navbar-header">
+          <button
+            type="button"
+            className="fd-mobile-menu-btn"
+            onClick={() => setMobileMenuOpen(prev => !prev)}
+            aria-label="Abrir menu lateral"
+          >
+            <Menu size={20} />
+          </button>
+
           <a
             href="/"
             onClick={e => {
@@ -738,7 +748,7 @@ export default function Home() {
             }}
             className="fd-navbar-brand"
           >
-            <svg width="32" height="32" viewBox="0 0 36 44" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <svg width="28" height="28" viewBox="0 0 36 44" fill="none" xmlns="http://www.w3.org/2000/svg">
               <path
                 d="M8.94981 23.8836C17.1535 22.0444 21.8606 18.63 23.1886 17.1527C25.1125 19.7791 23.5006 24.7713 22.4542 26.9391C19.9436 30.6278 9.57181 33.6852 9.35294 33.8456C5.33665 36.9488 9.0603 41.9613 9.23039 42.1733C9.23088 42.1734 9.23137 42.1735 9.23186 42.1737C9.23842 42.1826 9.23765 42.1823 9.23039 42.1733C5.05462 41.0619 2.48669 36.4087 1.72464 34.2207C0.0360044 28.059 5.83782 24.7619 8.94981 23.8836Z"
                 fill="#00B0FF"
@@ -748,14 +758,14 @@ export default function Home() {
                 fill="#615DFF"
               />
             </svg>
-            <span style={{ fontSize: 20, fontWeight: 700, color: "#1c2d41", letterSpacing: "-0.02em" }}>
+            <span style={{ fontSize: 19, fontWeight: 700, color: "var(--fd-dark)", letterSpacing: "-0.02em" }}>
               Prospecta
             </span>
           </a>
         </div>
 
         <div className="fd-navbar-collapse">
-          <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
+          <div className="fd-topbar-left">
             <button
               className="fd-btn"
               style={{ border: 0, background: "transparent", padding: "0 6px", position: "relative" }}
@@ -765,7 +775,7 @@ export default function Home() {
               }}
               title="Ver prioridades de hoje"
             >
-              <Bell size={20} style={{ color: "#7c8798" }} />
+              <Bell size={20} style={{ color: "var(--fd-body-color)" }} />
               <span
                 className="fd-badge-pill primary"
                 style={{ position: "absolute", top: -2, right: -4, fontSize: 10, padding: "2px 6px", lineHeight: 1 }}
@@ -775,7 +785,7 @@ export default function Home() {
             </button>
 
             <span
-              className={`fd-badge-pill ${
+              className={`fd-badge-pill fd-hide-sm ${
                 !systemStatus
                   ? "warning"
                   : systemStatus.whatsapp?.connected
@@ -800,11 +810,11 @@ export default function Home() {
                 className={`fd-btn fd-btn-sm fd-btn-rounded ${systemStatus.automationEnabled ? "" : "fd-btn-primary"}`}
                 style={{
                   height: 30,
-                  padding: "0 12px",
+                  padding: "0 11px",
                   fontSize: 12,
                   borderColor: systemStatus.automationEnabled ? "rgba(34, 202, 128, 0.45)" : undefined,
-                  color: systemStatus.automationEnabled ? "#166534" : undefined,
-                  background: systemStatus.automationEnabled ? "rgba(34, 202, 128, 0.12)" : undefined,
+                  color: systemStatus.automationEnabled ? "#22ca80" : undefined,
+                  background: systemStatus.automationEnabled ? "rgba(34, 202, 128, 0.14)" : undefined,
                 }}
                 title={
                   systemStatus.automationEnabled
@@ -813,7 +823,7 @@ export default function Home() {
                 }
               >
                 {systemStatus.automationEnabled ? <Pause size={12} /> : <Play size={12} />}
-                <span>
+                <span className="fd-hide-sm">
                   {togglingMessaging
                     ? "Salvando..."
                     : systemStatus.automationEnabled
@@ -824,8 +834,8 @@ export default function Home() {
             )}
           </div>
 
-          <div style={{ display: "flex", alignItems: "center", gap: 18 }}>
-            <div className="fd-customize-input">
+          <div className="fd-topbar-right">
+            <div className="fd-customize-input fd-desktop-search">
               <input
                 className="fd-pill-input"
                 type="search"
@@ -838,9 +848,20 @@ export default function Home() {
               />
               <Search
                 size={18}
-                style={{ position: "absolute", right: 16, top: "50%", transform: "translateY(-50%)", color: "#7c8798" }}
+                style={{ position: "absolute", right: 16, top: "50%", transform: "translateY(-50%)", color: "var(--fd-body-color)" }}
               />
             </div>
+
+            <button
+              type="button"
+              onClick={toggleTheme}
+              className="fd-btn"
+              style={{ border: 0, background: "transparent", padding: 6 }}
+              title={theme === "dark" ? "Mudar para modo claro" : "Mudar para modo escuro"}
+              aria-label="Alternar tema claro e escuro"
+            >
+              {theme === "dark" ? <Sun size={18} style={{ color: "#fdc16a" }} /> : <Moon size={18} style={{ color: "var(--fd-body-color)" }} />}
+            </button>
 
             <button
               onClick={() => {
@@ -852,28 +873,34 @@ export default function Home() {
               style={{ border: 0, background: "transparent", padding: 6 }}
               title="Atualizar empresas e conexão WhatsApp"
             >
-              <RefreshCw size={18} style={{ color: "#7c8798" }} />
+              <RefreshCw size={18} style={{ color: "var(--fd-body-color)" }} />
             </button>
 
-            <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+            <div className="fd-hide-sm" style={{ display: "flex", alignItems: "center", gap: 10 }}>
               <img
                 src="/freedash/profile-pic.jpg"
                 alt="Operador"
-                width={40}
-                height={40}
+                width={38}
+                height={38}
                 style={{ borderRadius: "50%", objectFit: "cover" }}
               />
               <div style={{ lineHeight: 1.2 }}>
-                <span style={{ fontSize: 13, color: "#7c8798" }}>Olá, </span>
-                <span style={{ fontSize: 14, fontWeight: 500, color: "#1c2d41" }}>Innovary</span>
+                <span style={{ fontSize: 13, color: "var(--fd-body-color)" }}>Olá, </span>
+                <span style={{ fontSize: 14, fontWeight: 500, color: "var(--fd-dark)" }}>Innovary</span>
               </div>
             </div>
           </div>
         </div>
       </header>
 
+      {/* Backdrop Mobile Sidebar */}
+      <div
+        className={`fd-sidebar-backdrop ${mobileMenuOpen ? "open" : ""}`}
+        onClick={() => setMobileMenuOpen(false)}
+      />
+
       {/* Left Sidebar (5 Menus Simples e Objetivos) */}
-      <aside className="fd-left-sidebar">
+      <aside className={`fd-left-sidebar ${mobileMenuOpen ? "open" : ""}`}>
         <nav className="fd-sidebar-nav">
           <ul className="fd-sidebar-ul">
             <li className={`fd-sidebar-item ${activeView === "dashboard" ? "selected" : ""}`}>
@@ -1009,8 +1036,8 @@ export default function Home() {
             </div>
           </div>
 
-          <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-            <button className="fd-btn fd-btn-primary fd-btn-rounded" onClick={() => setShowAddModal(true)}>
+          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+            <button className="fd-btn fd-btn-primary fd-btn-rounded fd-btn-sm" onClick={() => setShowAddModal(true)}>
               <Plus size={15} />
               <span>Nova Empresa</span>
             </button>
@@ -1020,437 +1047,209 @@ export default function Home() {
         {/* Main Fluid Container */}
         <div className="fd-container-fluid">
           {activeView === "dashboard" && (
-            <>
-              {/* Alertas Reais de Prontidão para Teste */}
-              {systemStatus && (!systemStatus.whatsapp?.connected || !systemStatus.automationEnabled || systemStatus.isLocalhostUrl) && (
-                <div
-                  className="fd-card"
-                  style={{
-                    borderLeft: `4px solid ${!systemStatus.whatsapp?.connected || !systemStatus.automationEnabled ? "#ff4f70" : "#fdc16a"}`,
-                    padding: "14px 20px",
-                    marginBottom: 22,
-                    display: "flex",
-                    flexDirection: "column",
-                    gap: 6,
-                  }}
-                >
-                  <div style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 14, fontWeight: 500, color: "#1c2d41" }}>
-                    <AlertTriangle size={17} style={{ color: !systemStatus.whatsapp?.connected ? "#ff4f70" : "#fb8c00" }} />
-                    <span>Avisos antes de enviar mensagens reais</span>
-                  </div>
-                  {!systemStatus.whatsapp?.connected && (
-                    <div style={{ fontSize: 13, color: "#4f5467" }}>
-                      WhatsApp desconectado ({systemStatus.whatsapp?.error || `estado: ${systemStatus.whatsapp?.state}`}). Conecte o celular na instância antes de disparar.
-                    </div>
-                  )}
-                  {!systemStatus.automationEnabled && (
-                    <div style={{ fontSize: 13, color: "#4f5467", display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
-                      <span>Os envios de WhatsApp estão pausados pelo painel. As buscas de empresas no Maps continuam rodando normalmente.</span>
-                      <button
-                        type="button"
-                        disabled={togglingMessaging}
-                        onClick={() => toggleMessagingEnabled(true)}
-                        className="fd-btn fd-btn-sm fd-btn-primary fd-btn-rounded"
-                        style={{ height: 26, padding: "0 12px", fontSize: 12 }}
-                      >
-                        Retomar Envios agora
-                      </button>
-                    </div>
-                  )}
-                  {systemStatus.isLocalhostUrl && (
-                    <div style={{ fontSize: 13, color: "#4f5467" }}>
-                      Você está acessando em endereço local (localhost). Para o cliente abrir o link rastreado da prévia no celular, acesse pelo domínio público publicado.
-                    </div>
-                  )}
-                </div>
-              )}
-
-              {/* Row 1: 4 KPIs 100% Reais e Clicáveis */}
-              <div className="fd-kpi-row">
-                <div
-                  className="fd-kpi-cell"
-                  style={{ cursor: "pointer" }}
-                  onClick={() => navigateView("pipeline", "GOLD")}
-                  title="Ver empresas sem site para criar prévia"
-                >
-                  <div>
-                    <div style={{ display: "inline-flex", alignItems: "center", gap: 8 }}>
-                      <h2 className="fd-kpi-value">{readyWithoutPreviewCount}</h2>
-                      <span className="fd-badge-pill primary">{goldPct}% sem site</span>
-                    </div>
-                    <h6 className="fd-kpi-label">Fazer Prévia (Ouro: {goldCount})</h6>
-                  </div>
-                  <UserPlus size={26} style={{ color: "#b8c3d5" }} />
-                </div>
-
-                <div
-                  className="fd-kpi-cell"
-                  style={{ cursor: "pointer" }}
-                  onClick={() => navigateView("pipeline", "DEMO")}
-                  title="Ver empresas com prévia pronta para enviar"
-                >
-                  <div>
-                    <div style={{ display: "inline-flex", alignItems: "center", gap: 8 }}>
-                      <h2 className="fd-kpi-value">{readyToSendCount}</h2>
-                      <span className="fd-badge-pill warning">{sentCount} enviadas</span>
-                    </div>
-                    <h6 className="fd-kpi-label">Prévias Prontas para Enviar</h6>
-                  </div>
-                  <FilePlus size={26} style={{ color: "#b8c3d5" }} />
-                </div>
-
-                <div
-                  className="fd-kpi-cell"
-                  style={{ cursor: "pointer" }}
-                  onClick={() => setPriorityTab("HOT")}
-                  title="Ver quem abriu a prévia"
-                >
-                  <div>
-                    <div style={{ display: "inline-flex", alignItems: "center", gap: 8 }}>
-                      <h2 className="fd-kpi-value">{viewedLeadsCount}</h2>
-                      <span className="fd-badge-pill success">{totalPreviewViews} cliques</span>
-                    </div>
-                    <h6 className="fd-kpi-label">Empresas que Abriram o Link</h6>
-                  </div>
-                  <Globe size={26} style={{ color: "#b8c3d5" }} />
-                </div>
-
-                <div
-                  className="fd-kpi-cell"
-                  style={{ cursor: "pointer" }}
-                  onClick={() => navigateView("pipeline", "WON")}
-                  title="Ver vendas fechadas"
-                >
-                  <div>
-                    <h2 className="fd-kpi-value">
-                      <sup className="fd-sup-currency">R$</sup>
-                      {monthlyRevenue.toLocaleString("pt-BR")}
-                    </h2>
-                    <h6 className="fd-kpi-label">
-                      Faturamento Real ({wonCount} {wonCount === 1 ? "venda" : "vendas"})
-                    </h6>
-                  </div>
-                  <DollarSign size={26} style={{ color: "#b8c3d5" }} />
-                </div>
-              </div>
-
-              {/* Row 2: Prioridades de Hoje (2/3) + Funil Real e Cidades (1/3) */}
-              <div className="fd-charts-2col">
-                <div className="fd-card">
-                  <div className="fd-card-body">
-                    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 12, marginBottom: 18 }}>
-                      <h4 className="fd-card-title" style={{ margin: 0 }}>Prioridades de Hoje</h4>
-                      <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-                        {[
-                          { id: "HOT", label: `Abriram o link (${hotLeads.length})` },
-                          { id: "HUMAN", label: `Sua vez (${waitingHumanLeads.length})` },
-                          { id: "FOLLOWUP", label: `Retorno 2d e 5d (${followUpLeads.length})` },
-                        ].map(tab => (
-                          <button
-                            key={tab.id}
-                            type="button"
-                            onClick={() => setPriorityTab(tab.id as "HOT" | "HUMAN" | "FOLLOWUP")}
-                            className={`fd-btn fd-btn-sm fd-btn-rounded ${priorityTab === tab.id ? "fd-btn-primary" : ""}`}
-                          >
-                            {tab.label}
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-
-                    {(() => {
-                      const activeList =
-                        priorityTab === "HOT"
-                          ? hotLeads
-                          : priorityTab === "HUMAN"
-                            ? waitingHumanLeads
-                            : followUpLeads;
-
-                      if (activeList.length === 0) {
-                        return (
-                          <div style={{ padding: "36px 20px", textAlign: "center", background: "#f9fbfd", borderRadius: 4, border: "1px dashed #dee2e6", color: "#7c8798", fontSize: 14 }}>
-                            {priorityTab === "HOT"
-                              ? "Nenhuma empresa abriu o link da prévia ainda. Assim que alguém clicar, aparecerá aqui em tempo real."
-                              : priorityTab === "HUMAN"
-                                ? "Nenhuma conversa aguardando resposta humana no momento."
-                                : "Nenhuma empresa precisando de retorno de 2 ou 5 dias hoje."}
-                          </div>
-                        );
-                      }
-
-                      return (
-                        <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-                          {activeList.slice(0, 6).map((item, idx) => {
-                            const displayName = item.company || item.name;
-                            const fu = getFollowUpStage(item);
-                            const lastClick = formatRelativeTimeBr(item.lastViewedAt);
-                            const lastMsgTime = formatRelativeTimeBr(item.lastMessageAt);
-                            return (
-                              <div
-                                key={item.id}
-                                onClick={() => openConversation(item.id)}
-                                style={{
-                                  display: "flex",
-                                  alignItems: "center",
-                                  justifyContent: "space-between",
-                                  gap: 12,
-                                  padding: "12px 14px",
-                                  borderRadius: 4,
-                                  border: "1px solid #edf2f9",
-                                  cursor: "pointer",
-                                  background: "#ffffff",
-                                }}
-                              >
-                                <div style={{ display: "flex", alignItems: "center", gap: 12, minWidth: 0 }}>
-                                  <span
-                                    className="fd-avatar-circle"
-                                    style={{ background: avatarPalette[idx % avatarPalette.length], width: 38, height: 38, fontSize: 12 }}
-                                  >
-                                    {getInitials(displayName)}
-                                  </span>
-                                  <div style={{ minWidth: 0 }}>
-                                    <div style={{ fontSize: 14, fontWeight: 500, color: "#1c2d41", display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
-                                      <span>{displayName}</span>
-                                      {priorityTab === "HOT" && (
-                                        <span className="fd-badge-pill success">
-                                          {item.previewViews} {item.previewViews === 1 ? "clique" : "cliques"} {lastClick ? `(${lastClick})` : ""}
-                                        </span>
-                                      )}
-                                      {priorityTab === "HUMAN" && item.aiPausedAt && (
-                                        <span className="fd-badge-pill warning">IA pausada</span>
-                                      )}
-                                      {priorityTab === "FOLLOWUP" && fu.due && (
-                                        <span className="fd-badge-pill warning">
-                                          {fu.daysSinceSent} dias sem resposta
-                                        </span>
-                                      )}
-                                    </div>
-                                    <div style={{ fontSize: 12, color: "#7c8798", marginTop: 2, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                                      {priorityTab === "HUMAN" && item.messages?.[0]?.body
-                                        ? `${lastMsgTime ? `${lastMsgTime}: ` : ""}${item.messages[0].body}`
-                                        : extractRegionLabel(item.address, item.source)}
-                                    </div>
-                                  </div>
-                                </div>
-
-                                <button
-                                  type="button"
-                                  className="fd-btn fd-btn-sm fd-btn-primary fd-btn-rounded"
-                                  onClick={e => {
-                                    e.stopPropagation();
-                                    openConversation(item.id);
-                                  }}
-                                >
-                                  {priorityTab === "HUMAN" ? "Responder" : priorityTab === "FOLLOWUP" ? "Retornar" : "Abrir"}
-                                </button>
-                              </div>
-                            );
-                          })}
-                        </div>
-                      );
-                    })()}
-                  </div>
-                </div>
-
-                {/* Funil Real e Cidades Reais */}
-                <div className="fd-card">
-                  <div className="fd-card-body">
-                    <h4 className="fd-card-title" style={{ marginBottom: 18 }}>Funil Real</h4>
-
-                    <div style={{ display: "flex", flexDirection: "column", gap: 14, marginBottom: 24 }}>
-                      {funnelSteps.map(step => {
-                        const pct = totalLeads > 0 ? Math.round((step.count / totalLeads) * 100) : 0;
-                        return (
-                          <div key={step.label}>
-                            <div style={{ display: "flex", justifyContent: "space-between", fontSize: 13, marginBottom: 5 }}>
-                              <span style={{ color: "#4f5467" }}>{step.label}</span>
-                              <span style={{ color: "#1c2d41", fontWeight: 500 }}>
-                                {step.count} ({pct}%)
-                              </span>
-                            </div>
-                            <div className="fd-progress">
-                              <div className="fd-progress-bar" style={{ width: `${pct}%`, background: step.color }} />
-                            </div>
-                          </div>
-                        );
-                      })}
-                    </div>
-
-                    <div style={{ borderTop: "1px solid #edf2f9", paddingTop: 16 }}>
-                      <div style={{ fontSize: 13, fontWeight: 500, color: "#1c2d41", marginBottom: 10 }}>
-                        Principais Cidades na Base
-                      </div>
-                      {realCities.length === 0 ? (
-                        <div style={{ fontSize: 12, color: "#7c8798" }}>
-                          Nenhuma empresa cadastrada ainda. Use Buscar no Maps para captar empresas reais.
-                        </div>
-                      ) : (
-                        <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-                          {realCities.map(city => (
-                            <div key={city.label} style={{ display: "flex", justifyContent: "space-between", fontSize: 13 }}>
-                              <span style={{ color: "#7c8798" }}>{city.label}</span>
-                              <span style={{ color: "#1c2d41", fontWeight: 500 }}>
-                                {city.count} ({city.pct}%)
-                              </span>
-                            </div>
-                          ))}
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </>
+            <DashboardOverview
+              systemStatus={systemStatus}
+              togglingMessaging={togglingMessaging}
+              onToggleMessaging={toggleMessagingEnabled}
+              totalLeads={totalLeads}
+              noRealSiteCount={noRealSiteCount}
+              goldCount={goldCount}
+              goldPct={goldPct}
+              readyWithoutPreviewCount={readyWithoutPreviewCount}
+              readyToSendCount={readyToSendCount}
+              demoCount={demoCount}
+              sentCount={sentCount}
+              viewedLeadsCount={viewedLeadsCount}
+              totalPreviewViews={totalPreviewViews}
+              repliedCount={repliedCount}
+              wonCount={wonCount}
+              monthlyRevenue={monthlyRevenue}
+              hotLeads={hotLeads}
+              waitingHumanLeads={waitingHumanLeads}
+              followUpLeads={followUpLeads}
+              priorityTab={priorityTab}
+              onChangePriorityTab={setPriorityTab}
+              realCities={realCities}
+              onNavigateStage={st => navigateView("pipeline", st)}
+              onOpenLead={id => openConversation(id)}
+            />
           )}
 
           {(activeView === "dashboard" || activeView === "pipeline") && (
-              <div className="fd-card">
-                <div className="fd-card-body">
-                  <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 14, marginBottom: 18 }}>
-                    <h4 className="fd-card-title" style={{ margin: 0 }}>
-                      Empresas ({filtered.length})
-                    </h4>
+            <div className="fd-card">
+              <div className="fd-card-body">
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 12, marginBottom: 16 }}>
+                  <h4 className="fd-card-title" style={{ margin: 0 }}>
+                    Empresas ({filtered.length})
+                  </h4>
 
-                    <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-                      {[
-                        { id: "ALL", label: "Todas" },
-                        { id: "GOLD", label: "Sem site" },
-                        { id: "DEMO", label: "Prévia pronta" },
-                        { id: "SENT", label: "Enviadas" },
-                        { id: "FOLLOWUP", label: `Retorno 2d e 5d${followUpCount ? ` (${followUpCount})` : ""}` },
-                        { id: "REPLIED", label: "Em conversa" },
-                        { id: "WON", label: "Fechadas" },
-                      ].map(st => (
-                        <button
-                          key={st.id}
-                          onClick={() => {
-                            setStageFilter(st.id);
-                            setVisibleCount(25);
-                          }}
-                          className={`fd-btn fd-btn-sm fd-btn-rounded ${stageFilter === st.id ? "fd-btn-primary" : ""}`}
-                        >
-                          {st.label}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-
-                  <div style={{ overflowX: "auto" }}>
-                    <table className="fd-table">
-                      <thead>
-                        <tr>
-                          <th>Empresa e Cidade</th>
-                          <th>Site e Avaliação</th>
-                          <th>WhatsApp</th>
-                          <th style={{ textAlign: "center" }}>Status</th>
-                          <th style={{ textAlign: "center" }}>Cliques</th>
-                          <th>Etapa</th>
-                          <th style={{ textAlign: "right" }}>Ação</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {filtered.length === 0 ? (
-                          <tr>
-                            <td colSpan={7} style={{ textAlign: "center", padding: "38px 16px", color: "#7c8798" }}>
-                              Nenhuma empresa encontrada neste filtro. Cadastre em <strong>Nova Empresa</strong> ou busque no Google Maps.
-                            </td>
-                          </tr>
-                        ) : (
-                          filtered.slice(0, visibleCount).map((l, idx) => {
-                            const conf = statusConfig[l.status] || { label: l.status, shortLabel: l.status, color: "#b8c3d5" };
-                            const gold = getLeadGoldScore(l);
-                            const followUp = getFollowUpStage(l);
-                            const realSite = hasRealWebsite(l.website);
-                            const displayName = l.company || l.name;
-                            const avColor = avatarPalette[idx % avatarPalette.length];
-
-                            return (
-                              <tr key={l.id} style={{ cursor: "pointer" }} onClick={() => openConversation(l.id)}>
-                                <td>
-                                  <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-                                    <span className="fd-avatar-circle" style={{ background: avColor }}>
-                                      {getInitials(displayName)}
-                                    </span>
-                                    <div>
-                                      <div style={{ fontSize: 15, fontWeight: 500, color: "#1c2d41", display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
-                                        <span>{displayName}</span>
-                                        {gold.isGold && <span className="fd-badge-pill warning">Destaque</span>}
-                                        {l.previewUrl && <span className="fd-badge-pill primary">Prévia</span>}
-                                        {l.aiPausedAt && <span className="fd-badge-pill warning">IA pausada</span>}
-                                      </div>
-                                      <span style={{ fontSize: 13, color: "#7c8798" }}>{l.address || l.category || l.name}</span>
-                                    </div>
-                                  </div>
-                                </td>
-                                <td>
-                                  <div style={{ fontSize: 13, color: realSite ? "#4f5467" : "#ff4f70", fontWeight: realSite ? 400 : 500 }}>
-                                    {realSite && l.website ? l.website.replace(/^https?:\/\/(www\.)?/, "").slice(0, 26) : "Sem site próprio"}
-                                  </div>
-                                  {typeof l.rating === "number" && (
-                                    <div style={{ fontSize: 12, color: "#fdc16a", fontWeight: 500, marginTop: 2 }}>
-                                      ★ {l.rating.toFixed(1)} ({l.reviewsCount ?? 0} avaliações)
-                                    </div>
-                                  )}
-                                </td>
-                                <td style={{ fontWeight: 500, color: "#1c2d41" }}>{l.phone}</td>
-                                <td style={{ textAlign: "center" }}>
-                                  <span className="fd-status-dot" style={{ background: conf.color }} title={conf.label} />
-                                </td>
-                                <td style={{ textAlign: "center", fontWeight: 500, color: "#1c2d41" }}>
-                                  {l.previewViews ?? 0}
-                                </td>
-                                <td>
-                                  <div style={{ display: "flex", flexDirection: "column", gap: 4, alignItems: "flex-start" }}>
-                                    <span style={{ fontSize: 13, fontWeight: 500, color: "#1c2d41" }}>{conf.shortLabel}</span>
-                                    {followUp.due && (
-                                      <span className="fd-badge-pill warning">
-                                        Retorno {followUp.due === "DAY_5" ? "5d" : "2d"}
-                                      </span>
-                                    )}
-                                  </div>
-                                </td>
-                                <td style={{ textAlign: "right" }}>
-                                  <button
-                                    className="fd-btn fd-btn-sm fd-btn-rounded fd-btn-primary"
-                                    onClick={e => {
-                                      e.stopPropagation();
-                                      openConversation(l.id);
-                                    }}
-                                  >
-                                    Abrir
-                                  </button>
-                                </td>
-                              </tr>
-                            );
-                          })
-                        )}
-                      </tbody>
-                    </table>
-                  </div>
-
-                  {filtered.length > visibleCount && (
-                    <div style={{ textAlign: "center", marginTop: 18 }}>
+                  <div style={{ display: "flex", gap: 6, flexWrap: "wrap", width: "auto", maxWidth: "100%" }}>
+                    {[
+                      { id: "ALL", label: "Todas" },
+                      { id: "GOLD", label: "Sem site" },
+                      { id: "DEMO", label: "Prévia pronta" },
+                      { id: "SENT", label: "Enviadas" },
+                      { id: "FOLLOWUP", label: `Retorno 2d e 5d${followUpCount ? ` (${followUpCount})` : ""}` },
+                      { id: "REPLIED", label: "Em conversa" },
+                      { id: "WON", label: "Fechadas" },
+                    ].map(st => (
                       <button
-                        type="button"
-                        className="fd-btn fd-btn-rounded"
-                        onClick={() => setVisibleCount(prev => prev + 25)}
+                        key={st.id}
+                        onClick={() => {
+                          setStageFilter(st.id);
+                          setVisibleCount(25);
+                        }}
+                        className={`fd-btn fd-btn-sm fd-btn-rounded ${stageFilter === st.id ? "fd-btn-primary" : ""}`}
                       >
-                        Mostrar mais empresas ({filtered.length - visibleCount} restantes)
+                        {st.label}
                       </button>
-                    </div>
-                  )}
+                    ))}
+                  </div>
                 </div>
+
+                {/* Busca rapida visivel no mobile dentro da lista */}
+                <div style={{ marginBottom: 14, position: "relative" }}>
+                  <input
+                    className="fd-input"
+                    type="search"
+                    placeholder="Buscar empresa por nome, telefone ou cidade..."
+                    value={query}
+                    onChange={e => {
+                      setQuery(e.target.value);
+                      setVisibleCount(25);
+                    }}
+                    style={{ paddingRight: 34 }}
+                  />
+                  <Search
+                    size={15}
+                    style={{ position: "absolute", right: 12, top: "50%", transform: "translateY(-50%)", color: "var(--fd-body-color)" }}
+                  />
+                </div>
+
+                <div style={{ overflowX: "auto" }}>
+                  <table className="fd-table">
+                    <thead>
+                      <tr>
+                        <th>Empresa</th>
+                        <th className="fd-col-hide-sm">Site e Nota</th>
+                        <th className="fd-col-hide-sm">WhatsApp</th>
+                        <th className="fd-col-hide-sm" style={{ textAlign: "center" }}>Status</th>
+                        <th style={{ textAlign: "center" }}>Cliques</th>
+                        <th>Etapa</th>
+                        <th style={{ textAlign: "right" }}>Ação</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {filtered.length === 0 ? (
+                        <tr>
+                          <td colSpan={7} style={{ textAlign: "center", padding: "36px 14px", color: "var(--fd-body-color)" }}>
+                            Nenhuma empresa encontrada neste filtro. Cadastre em <strong>Nova Empresa</strong> ou busque no Google Maps.
+                          </td>
+                        </tr>
+                      ) : (
+                        filtered.slice(0, visibleCount).map((l, idx) => {
+                          const conf = statusConfig[l.status] || { label: l.status, shortLabel: l.status, color: "#b8c3d5" };
+                          const gold = getLeadGoldScore(l);
+                          const followUp = getFollowUpStage(l);
+                          const realSite = hasRealWebsite(l.website);
+                          const displayName = l.company || l.name;
+                          const avColor = avatarPalette[idx % avatarPalette.length];
+
+                          return (
+                            <tr key={l.id} style={{ cursor: "pointer" }} onClick={() => openConversation(l.id)}>
+                              <td>
+                                <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                                  <span className="fd-avatar-circle fd-col-hide-sm" style={{ background: avColor }}>
+                                    {getInitials(displayName)}
+                                  </span>
+                                  <div>
+                                    <div style={{ fontSize: 14, fontWeight: 500, color: "var(--fd-dark)", display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
+                                      <span>{displayName}</span>
+                                      {gold.isGold && <span className="fd-badge-pill warning">Destaque</span>}
+                                      {l.previewUrl && <span className="fd-badge-pill primary">Prévia</span>}
+                                      {l.aiPausedAt && <span className="fd-badge-pill warning">IA pausada</span>}
+                                    </div>
+                                    <span style={{ fontSize: 12, color: "var(--fd-body-color)" }}>{l.address || l.category || l.phone}</span>
+                                  </div>
+                                </div>
+                              </td>
+                              <td className="fd-col-hide-sm">
+                                <div style={{ fontSize: 13, color: realSite ? "var(--fd-gray-700)" : "#ff4f70", fontWeight: realSite ? 400 : 500 }}>
+                                  {realSite && l.website ? l.website.replace(/^https?:\/\/(www\.)?/, "").slice(0, 26) : "Sem site próprio"}
+                                </div>
+                                {typeof l.rating === "number" && (
+                                  <div style={{ fontSize: 12, color: "#fdc16a", fontWeight: 500, marginTop: 2 }}>
+                                    ★ {l.rating.toFixed(1)} ({l.reviewsCount ?? 0} avaliações)
+                                  </div>
+                                )}
+                              </td>
+                              <td className="fd-col-hide-sm" style={{ fontWeight: 500, color: "var(--fd-dark)" }}>{l.phone}</td>
+                              <td className="fd-col-hide-sm" style={{ textAlign: "center" }}>
+                                <span className="fd-status-dot" style={{ background: conf.color }} title={conf.label} />
+                              </td>
+                              <td style={{ textAlign: "center", fontWeight: 500, color: "var(--fd-dark)" }}>
+                                {l.previewViews ?? 0}
+                              </td>
+                              <td>
+                                <div style={{ display: "flex", flexDirection: "column", gap: 4, alignItems: "flex-start" }}>
+                                  <span style={{ fontSize: 13, fontWeight: 500, color: "var(--fd-dark)" }}>{conf.shortLabel}</span>
+                                  {followUp.due && (
+                                    <span className="fd-badge-pill warning">
+                                      Retorno {followUp.due === "DAY_5" ? "5d" : "2d"}
+                                    </span>
+                                  )}
+                                </div>
+                              </td>
+                              <td style={{ textAlign: "right" }}>
+                                <button
+                                  className="fd-btn fd-btn-sm fd-btn-rounded fd-btn-primary"
+                                  onClick={e => {
+                                    e.stopPropagation();
+                                    openConversation(l.id);
+                                  }}
+                                >
+                                  Abrir
+                                </button>
+                              </td>
+                            </tr>
+                          );
+                        })
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+
+                {filtered.length > visibleCount && (
+                  <div style={{ textAlign: "center", marginTop: 18 }}>
+                    <button
+                      type="button"
+                      className="fd-btn fd-btn-rounded"
+                      onClick={() => setVisibleCount(prev => prev + 25)}
+                    >
+                      Mostrar mais empresas ({filtered.length - visibleCount} restantes)
+                    </button>
+                  </div>
+                )}
               </div>
+            </div>
           )}
 
           {activeView === "chat" && (
-            <div className="fd-chat-workspace">
+            <div className={`fd-chat-workspace ${mobileChatActive ? "has-active-chat" : ""}`}>
               <div className="fd-chat-contacts">
-                <div style={{ padding: "16px 16px 12px", borderBottom: "1px solid #edf2f9" }}>
+                <div style={{ padding: "14px 14px 12px", borderBottom: "1px solid var(--fd-border-color)" }}>
                   <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10 }}>
                     <h4 className="fd-card-title" style={{ margin: 0, fontSize: 16 }}>Conversas</h4>
                     <span className="fd-badge-pill primary">{chatContacts.length}</span>
                   </div>
+                  <input
+                    className="fd-input"
+                    type="search"
+                    placeholder="Buscar conversa..."
+                    value={query}
+                    onChange={e => setQuery(e.target.value)}
+                    style={{ height: 34, fontSize: 13, marginBottom: 10 }}
+                  />
                   <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
                     {[
                       { id: "ALL", label: "Todas" },
@@ -1472,7 +1271,7 @@ export default function Home() {
 
                 <div style={{ flex: 1, overflowY: "auto" }}>
                   {chatContacts.length === 0 ? (
-                    <div style={{ padding: 28, textAlign: "center", fontSize: 13, color: "#7c8798" }}>
+                    <div style={{ padding: 28, textAlign: "center", fontSize: 13, color: "var(--fd-body-color)" }}>
                       Nenhuma conversa encontrada neste filtro.
                     </div>
                   ) : (
@@ -1484,7 +1283,7 @@ export default function Home() {
                         <button
                           key={l.id}
                           type="button"
-                          onClick={() => openConversation(l.id)}
+                          onClick={() => openConversation(l.id, true)}
                           className={`fd-chat-contact-item ${selectedLeadId === l.id ? "active" : ""}`}
                         >
                           <span
@@ -1499,7 +1298,7 @@ export default function Home() {
                                 style={{
                                   fontSize: 14,
                                   fontWeight: 500,
-                                  color: "#1c2d41",
+                                  color: "var(--fd-dark)",
                                   overflow: "hidden",
                                   textOverflow: "ellipsis",
                                   whiteSpace: "nowrap",
@@ -1512,7 +1311,7 @@ export default function Home() {
                             <div
                               style={{
                                 fontSize: 12,
-                                color: "#7c8798",
+                                color: "var(--fd-body-color)",
                                 overflow: "hidden",
                                 textOverflow: "ellipsis",
                                 whiteSpace: "nowrap",
@@ -1522,7 +1321,7 @@ export default function Home() {
                               {lastMsg || l.phone}
                             </div>
                             <div style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 4, flexWrap: "wrap" }}>
-                              <span style={{ fontSize: 11, color: "#7c8798" }}>{conf.shortLabel}</span>
+                              <span style={{ fontSize: 11, color: "var(--fd-body-color)" }}>{conf.shortLabel}</span>
                               {l.aiPausedAt && (
                                 <span className="fd-badge-pill warning" style={{ fontSize: 10, padding: "1px 6px" }}>
                                   Sua vez
@@ -1543,7 +1342,10 @@ export default function Home() {
               </div>
 
               <div className="fd-chat-pane">
-                <LeadConversationPane {...conversationPaneProps} />
+                <LeadConversationPane
+                  {...conversationPaneProps}
+                  onBackMobile={() => setMobileChatActive(false)}
+                />
               </div>
             </div>
           )}
@@ -1553,7 +1355,7 @@ export default function Home() {
           {activeView === "suppressions" && (
             <div className="fd-card">
               <div className="fd-card-body">
-                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 20 }}>
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 12, marginBottom: 20 }}>
                   <h4 className="fd-card-title" style={{ margin: 0 }}>Contatos Bloqueados</h4>
                   <button className="fd-btn fd-btn-primary fd-btn-rounded fd-btn-sm" onClick={() => setShowAddSuppressionModal(true)}>
                     <Plus size={14} /> Bloquear Número
@@ -1566,23 +1368,23 @@ export default function Home() {
                       <tr>
                         <th>Telefone</th>
                         <th>Motivo</th>
-                        <th>Data</th>
+                        <th className="fd-col-hide-sm">Data</th>
                         <th style={{ textAlign: "right" }}>Ações</th>
                       </tr>
                     </thead>
                     <tbody>
                       {suppressions.length === 0 ? (
                         <tr>
-                          <td colSpan={4} style={{ textAlign: "center", padding: "40px 16px", color: "#7c8798" }}>
+                          <td colSpan={4} style={{ textAlign: "center", padding: "40px 16px", color: "var(--fd-body-color)" }}>
                             Nenhum número bloqueado no momento.
                           </td>
                         </tr>
                       ) : (
                         suppressions.map(s => (
                           <tr key={s.phone}>
-                            <td style={{ fontWeight: 500, color: "#1c2d41" }}>{s.phone}</td>
+                            <td style={{ fontWeight: 500, color: "var(--fd-dark)" }}>{s.phone}</td>
                             <td><span className="fd-badge-pill danger">{s.reason}</span></td>
-                            <td>{new Date(s.createdAt).toLocaleDateString("pt-BR")}</td>
+                            <td className="fd-col-hide-sm">{new Date(s.createdAt).toLocaleDateString("pt-BR")}</td>
                             <td style={{ textAlign: "right" }}>
                               <button className="fd-btn fd-btn-sm fd-btn-rounded" onClick={() => unblockPhone(s.phone)}>
                                 Desbloquear
@@ -1604,7 +1406,7 @@ export default function Home() {
         </footer>
       </div>
 
-      {/* Offcanvas Drawer WhatsApp e Prévia Sniper */}
+      {/* Offcanvas Drawer WhatsApp e Previa */}
       {selectedLeadId && activeView !== "chat" && (
         <div className="fd-drawer-backdrop" onClick={() => setSelectedLeadId(null)}>
           <div className="fd-drawer" onClick={e => e.stopPropagation()}>
@@ -1613,60 +1415,60 @@ export default function Home() {
         </div>
       )}
 
-      {/* Modal Add Lead */}
+      {/* Modal Cadastrar Empresa */}
       {showAddModal && (
         <div className="fd-modal-backdrop" onClick={() => setShowAddModal(false)}>
           <div className="fd-modal" onClick={e => e.stopPropagation()}>
-            <div style={{ padding: "18px 24px", borderBottom: "1px solid #edf2f9", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-              <h3 style={{ fontSize: 18, fontWeight: 500, color: "#1c2d41", margin: 0 }}>Cadastrar Empresa</h3>
+            <div style={{ padding: "18px 22px", borderBottom: "1px solid var(--fd-border-color)", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+              <h3 style={{ fontSize: 18, fontWeight: 500, color: "var(--fd-dark)", margin: 0 }}>Cadastrar Empresa</h3>
               <button onClick={() => setShowAddModal(false)} className="fd-btn fd-btn-sm" style={{ padding: "0 8px" }}>
                 <X size={15} />
               </button>
             </div>
-            <form onSubmit={addLead} style={{ padding: 24, display: "flex", flexDirection: "column", gap: 14 }}>
+            <form onSubmit={addLead} style={{ padding: 22, display: "flex", flexDirection: "column", gap: 14 }}>
               <div>
-                <label style={{ display: "block", fontSize: 13, fontWeight: 500, color: "#1c2d41", marginBottom: 4 }}>Nome da Empresa</label>
+                <label style={{ display: "block", fontSize: 13, fontWeight: 500, color: "var(--fd-dark)", marginBottom: 4 }}>Nome da Empresa</label>
                 <input className="fd-input" value={form.company} onChange={e => setForm({ ...form, company: e.target.value })} placeholder="Ex.: Locadora Forte Equipamentos" />
               </div>
 
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+              <div className="fd-form-grid-2">
                 <div>
-                  <label style={{ display: "block", fontSize: 13, fontWeight: 500, color: "#1c2d41", marginBottom: 4 }}>Contato ou Responsável</label>
+                  <label style={{ display: "block", fontSize: 13, fontWeight: 500, color: "var(--fd-dark)", marginBottom: 4 }}>Contato ou Responsável</label>
                   <input className="fd-input" required value={form.name} onChange={e => setForm({ ...form, name: e.target.value })} placeholder="Ex.: Comercial" />
                 </div>
                 <div>
-                  <label style={{ display: "block", fontSize: 13, fontWeight: 500, color: "#1c2d41", marginBottom: 4 }}>WhatsApp (com DDD)</label>
+                  <label style={{ display: "block", fontSize: 13, fontWeight: 500, color: "var(--fd-dark)", marginBottom: 4 }}>WhatsApp (com DDD)</label>
                   <input className="fd-input" required value={form.phone} onChange={e => setForm({ ...form, phone: e.target.value })} placeholder="5519999999999" />
                 </div>
               </div>
 
-              <div style={{ display: "grid", gridTemplateColumns: "1.4fr 0.8fr 0.8fr", gap: 12 }}>
+              <div className="fd-form-grid-3">
                 <div>
-                  <label style={{ display: "block", fontSize: 13, fontWeight: 500, color: "#1c2d41", marginBottom: 4 }}>Segmento</label>
+                  <label style={{ display: "block", fontSize: 13, fontWeight: 500, color: "var(--fd-dark)", marginBottom: 4 }}>Segmento</label>
                   <input className="fd-input" value={form.category} onChange={e => setForm({ ...form, category: e.target.value })} />
                 </div>
                 <div>
-                  <label style={{ display: "block", fontSize: 13, fontWeight: 500, color: "#1c2d41", marginBottom: 4 }}>Nota Google</label>
+                  <label style={{ display: "block", fontSize: 13, fontWeight: 500, color: "var(--fd-dark)", marginBottom: 4 }}>Nota Google</label>
                   <input className="fd-input" value={form.rating} onChange={e => setForm({ ...form, rating: e.target.value })} placeholder="4.8" />
                 </div>
                 <div>
-                  <label style={{ display: "block", fontSize: 13, fontWeight: 500, color: "#1c2d41", marginBottom: 4 }}>Avaliações</label>
+                  <label style={{ display: "block", fontSize: 13, fontWeight: 500, color: "var(--fd-dark)", marginBottom: 4 }}>Avaliações</label>
                   <input className="fd-input" type="number" min={0} value={form.reviewsCount} onChange={e => setForm({ ...form, reviewsCount: e.target.value })} placeholder="35" />
                 </div>
               </div>
 
               <div>
-                <label style={{ display: "block", fontSize: 13, fontWeight: 500, color: "#1c2d41", marginBottom: 4 }}>Cidade e Endereço</label>
+                <label style={{ display: "block", fontSize: 13, fontWeight: 500, color: "var(--fd-dark)", marginBottom: 4 }}>Cidade e Endereço</label>
                 <input className="fd-input" value={form.address} onChange={e => setForm({ ...form, address: e.target.value })} placeholder="Campinas, SP" />
               </div>
 
               <div>
-                <label style={{ display: "block", fontSize: 13, fontWeight: 500, color: "#1c2d41", marginBottom: 4 }}>Site Atual (deixe vazio se não tiver)</label>
+                <label style={{ display: "block", fontSize: 13, fontWeight: 500, color: "var(--fd-dark)", marginBottom: 4 }}>Site Atual (deixe vazio se não tiver)</label>
                 <input className="fd-input" value={form.website} onChange={e => setForm({ ...form, website: e.target.value })} placeholder="Vazio ou https://..." />
               </div>
 
               <div>
-                <label style={{ display: "block", fontSize: 13, fontWeight: 500, color: "#1c2d41", marginBottom: 4 }}>Link da Prévia (opcional)</label>
+                <label style={{ display: "block", fontSize: 13, fontWeight: 500, color: "var(--fd-dark)", marginBottom: 4 }}>Link da Prévia (opcional)</label>
                 <input className="fd-input" value={form.previewUrl} onChange={e => setForm({ ...form, previewUrl: e.target.value })} placeholder="https://previa.seudominio.com" />
               </div>
 
@@ -1681,23 +1483,23 @@ export default function Home() {
         </div>
       )}
 
-      {/* Modal Add Suppression */}
+      {/* Modal Bloquear Numero */}
       {showAddSuppressionModal && (
         <div className="fd-modal-backdrop" onClick={() => setShowAddSuppressionModal(false)}>
           <div className="fd-modal" style={{ width: "min(440px, 100%)" }} onClick={e => e.stopPropagation()}>
-            <div style={{ padding: "18px 24px", borderBottom: "1px solid #edf2f9", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-              <h3 style={{ fontSize: 18, fontWeight: 500, color: "#1c2d41", margin: 0 }}>Bloquear Número</h3>
+            <div style={{ padding: "18px 22px", borderBottom: "1px solid var(--fd-border-color)", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+              <h3 style={{ fontSize: 18, fontWeight: 500, color: "var(--fd-dark)", margin: 0 }}>Bloquear Número</h3>
               <button onClick={() => setShowAddSuppressionModal(false)} className="fd-btn fd-btn-sm" style={{ padding: "0 8px" }}>
                 <X size={15} />
               </button>
             </div>
-            <form onSubmit={addSuppression} style={{ padding: 24, display: "flex", flexDirection: "column", gap: 14 }}>
+            <form onSubmit={addSuppression} style={{ padding: 22, display: "flex", flexDirection: "column", gap: 14 }}>
               <div>
-                <label style={{ display: "block", fontSize: 13, fontWeight: 500, color: "#1c2d41", marginBottom: 4 }}>WhatsApp para Bloqueio</label>
+                <label style={{ display: "block", fontSize: 13, fontWeight: 500, color: "var(--fd-dark)", marginBottom: 4 }}>WhatsApp para Bloqueio</label>
                 <input className="fd-input" required value={suppressionForm.phone} onChange={e => setSuppressionForm({ ...suppressionForm, phone: e.target.value })} placeholder="5511999999999" />
               </div>
               <div>
-                <label style={{ display: "block", fontSize: 13, fontWeight: 500, color: "#1c2d41", marginBottom: 4 }}>Motivo</label>
+                <label style={{ display: "block", fontSize: 13, fontWeight: 500, color: "var(--fd-dark)", marginBottom: 4 }}>Motivo</label>
                 <input className="fd-input" required value={suppressionForm.reason} onChange={e => setSuppressionForm({ ...suppressionForm, reason: e.target.value })} />
               </div>
               <div style={{ display: "flex", justifyContent: "flex-end", gap: 10, marginTop: 8 }}>

@@ -191,8 +191,8 @@ export default function CampaignsPanel({ onNotify }: CampaignsPanelProps) {
       <div
         className="fd-card"
         style={{
-          borderLeft: "4px solid #5f76e8",
-          padding: "16px 22px",
+          borderLeft: "4px solid var(--fd-primary)",
+          padding: "16px 20px",
           flexDirection: "row",
           alignItems: "center",
           justifyContent: "space-between",
@@ -200,10 +200,10 @@ export default function CampaignsPanel({ onNotify }: CampaignsPanelProps) {
           flexWrap: "wrap",
         }}
       >
-        <div style={{ display: "flex", alignItems: "center", gap: 12, flex: 1, minWidth: 260 }}>
-          <ShieldCheck size={20} style={{ color: "#5f76e8", flexShrink: 0 }} />
-          <div style={{ fontSize: 13, color: "#4f5467", lineHeight: 1.45 }}>
-            <strong style={{ color: "#1c2d41" }}>Esteira diária inteligente (1 cidade nova por dia):</strong> a captura roda independente dos envios de WhatsApp, filtrando empresas com nota 4,0 ou mais, mínimo 5 avaliações e sem site próprio (incluindo Instagram). Você pode usar <strong>Buscar agora</strong> a qualquer momento.
+        <div style={{ display: "flex", alignItems: "center", gap: 12, flex: "1 1 240px" }}>
+          <ShieldCheck size={20} style={{ color: "var(--fd-primary)", flexShrink: 0 }} />
+          <div style={{ fontSize: 13, color: "var(--fd-gray-700)", lineHeight: 1.45 }}>
+            <strong style={{ color: "var(--fd-dark)" }}>Esteira diária inteligente (1 cidade nova por dia):</strong> a captura roda independente dos envios de WhatsApp, filtrando empresas com nota 4,0 ou mais, mínimo 5 avaliações e sem site próprio (incluindo Instagram). Você pode usar <strong>Buscar agora</strong> a qualquer momento.
           </div>
         </div>
 
@@ -224,7 +224,7 @@ export default function CampaignsPanel({ onNotify }: CampaignsPanelProps) {
         <div
           className="fd-card"
           style={{
-            padding: "14px 20px",
+            padding: "14px 18px",
             flexDirection: "row",
             alignItems: "center",
             justifyContent: "space-between",
@@ -250,7 +250,7 @@ export default function CampaignsPanel({ onNotify }: CampaignsPanelProps) {
             ))}
           </div>
 
-          <div style={{ position: "relative", minWidth: 220 }}>
+          <div style={{ position: "relative", flex: "1 1 200px", maxWidth: 280 }}>
             <input
               className="fd-input"
               type="search"
@@ -261,7 +261,7 @@ export default function CampaignsPanel({ onNotify }: CampaignsPanelProps) {
             />
             <Search
               size={14}
-              style={{ position: "absolute", right: 10, top: "50%", transform: "translateY(-50%)", color: "#7c8798" }}
+              style={{ position: "absolute", right: 10, top: "50%", transform: "translateY(-50%)", color: "var(--fd-body-color)" }}
             />
           </div>
         </div>
@@ -271,8 +271,8 @@ export default function CampaignsPanel({ onNotify }: CampaignsPanelProps) {
         <div
           className="fd-card"
           style={{
-            background: "rgba(34, 202, 128, 0.12)",
-            color: "#166534",
+            background: "rgba(34, 202, 128, 0.14)",
+            color: "#22ca80",
             padding: "12px 18px",
             flexDirection: "row",
             justifyContent: "space-between",
@@ -284,7 +284,7 @@ export default function CampaignsPanel({ onNotify }: CampaignsPanelProps) {
           <span>{notice}</span>
           <button
             onClick={() => setNotice("")}
-            style={{ border: 0, background: "transparent", color: "#166534", cursor: "pointer", fontWeight: 600 }}
+            style={{ border: 0, background: "transparent", color: "#22ca80", cursor: "pointer", fontWeight: 600 }}
           >
             Fechar
           </button>
@@ -295,8 +295,8 @@ export default function CampaignsPanel({ onNotify }: CampaignsPanelProps) {
         <div
           className="fd-card"
           style={{
-            background: "rgba(255, 79, 112, 0.12)",
-            color: "#be123c",
+            background: "rgba(255, 79, 112, 0.14)",
+            color: "#ff4f70",
             padding: "12px 18px",
             fontSize: 14,
             fontWeight: 500,
@@ -314,7 +314,7 @@ export default function CampaignsPanel({ onNotify }: CampaignsPanelProps) {
               height: 54,
               borderRadius: "50%",
               background: "rgba(95, 118, 232, 0.12)",
-              color: "#5f76e8",
+              color: "var(--fd-primary)",
               display: "grid",
               placeItems: "center",
               marginBottom: 14,
@@ -322,10 +322,10 @@ export default function CampaignsPanel({ onNotify }: CampaignsPanelProps) {
           >
             <Search size={22} />
           </div>
-          <h3 style={{ fontSize: 18, fontWeight: 500, color: "#1c2d41", margin: "0 0 6px" }}>
+          <h3 style={{ fontSize: 18, fontWeight: 500, color: "var(--fd-dark)", margin: "0 0 6px" }}>
             {campaigns.length === 0 ? "Nenhuma busca configurada" : "Nenhuma cidade encontrada neste filtro"}
           </h3>
-          <p style={{ fontSize: 14, color: "#7c8798", margin: "0 0 20px", maxWidth: 460 }}>
+          <p style={{ fontSize: 14, color: "var(--fd-body-color)", margin: "0 0 20px", maxWidth: 460 }}>
             {campaigns.length === 0
               ? "Crie uma busca com termos comerciais do nicho de locadoras e selecione a cidade desejada."
               : "Limpe o filtro ou digite outra cidade para visualizar."}
@@ -338,14 +338,14 @@ export default function CampaignsPanel({ onNotify }: CampaignsPanelProps) {
           )}
         </div>
       ) : (
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(380px, 1fr))", gap: 20 }}>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 330px), 1fr))", gap: 18 }}>
           {filteredCampaigns.map(c => (
             <article key={c.id} className="fd-card" style={{ marginBottom: 0 }}>
-              <div className="fd-card-body" style={{ display: "flex", flexDirection: "column", gap: 16, flex: 1 }}>
-                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 12 }}>
+              <div className="fd-card-body" style={{ display: "flex", flexDirection: "column", gap: 14, flex: 1 }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 10 }}>
                   <div>
-                    <div style={{ fontSize: 16, fontWeight: 500, color: "#1c2d41" }}>{c.name}</div>
-                    <div style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 13, color: "#7c8798", marginTop: 6, flexWrap: "wrap" }}>
+                    <div style={{ fontSize: 15, fontWeight: 500, color: "var(--fd-dark)" }}>{c.name}</div>
+                    <div style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 13, color: "var(--fd-body-color)", marginTop: 6, flexWrap: "wrap" }}>
                       <MapPin size={13} />
                       <span>
                         {c.location}
@@ -374,8 +374,8 @@ export default function CampaignsPanel({ onNotify }: CampaignsPanelProps) {
                     <span
                       key={t}
                       style={{
-                        background: "rgba(95, 118, 232, 0.1)",
-                        color: "#5f76e8",
+                        background: "rgba(95, 118, 232, 0.14)",
+                        color: "var(--fd-primary)",
                         fontSize: 12,
                         fontWeight: 500,
                         padding: "4px 10px",
@@ -392,18 +392,18 @@ export default function CampaignsPanel({ onNotify }: CampaignsPanelProps) {
                     display: "grid",
                     gridTemplateColumns: "repeat(3, 1fr)",
                     gap: 10,
-                    padding: "14px 0",
-                    borderTop: "1px solid #edf2f9",
-                    borderBottom: "1px solid #edf2f9",
+                    padding: "12px 0",
+                    borderTop: "1px solid var(--fd-border-color)",
+                    borderBottom: "1px solid var(--fd-border-color)",
                   }}
                 >
                   <div>
-                    <div style={{ fontSize: 12, color: "#7c8798" }}>Qualificados novos</div>
-                    <div style={{ fontSize: 15, fontWeight: 500, color: "#1c2d41", marginTop: 2 }}>{c.lastSearchAdded}</div>
+                    <div style={{ fontSize: 12, color: "var(--fd-body-color)" }}>Qualificados</div>
+                    <div style={{ fontSize: 15, fontWeight: 500, color: "var(--fd-dark)", marginTop: 2 }}>{c.lastSearchAdded}</div>
                   </div>
                   <div>
-                    <div style={{ fontSize: 12, color: "#7c8798" }}>Última execução</div>
-                    <div style={{ fontSize: 13, fontWeight: 500, color: "#1c2d41", marginTop: 4 }}>
+                    <div style={{ fontSize: 12, color: "var(--fd-body-color)" }}>Execução</div>
+                    <div style={{ fontSize: 12, fontWeight: 500, color: "var(--fd-dark)", marginTop: 4 }}>
                       {c.lastSearchedAt
                         ? new Date(c.lastSearchedAt).toLocaleString("pt-BR", {
                             day: "2-digit",
@@ -411,16 +411,16 @@ export default function CampaignsPanel({ onNotify }: CampaignsPanelProps) {
                             hour: "2-digit",
                             minute: "2-digit",
                           })
-                        : "Aguardando dia na fila"}
+                        : "Na fila"}
                     </div>
                   </div>
                   <div>
-                    <div style={{ fontSize: 12, color: "#7c8798" }}>Estado</div>
+                    <div style={{ fontSize: 12, color: "var(--fd-body-color)" }}>Estado</div>
                     <div
                       style={{
                         fontSize: 13,
                         fontWeight: 500,
-                        color: c.lastSearchStatus === "FAILED" ? "#ff4f70" : "#1c2d41",
+                        color: c.lastSearchStatus === "FAILED" ? "#ff4f70" : "var(--fd-dark)",
                         marginTop: 4,
                       }}
                     >
@@ -430,7 +430,7 @@ export default function CampaignsPanel({ onNotify }: CampaignsPanelProps) {
                 </div>
 
                 {c.lastSearchError && (
-                  <div style={{ fontSize: 12, color: "#ff4f70", background: "rgba(255, 79, 112, 0.1)", padding: "8px 10px", borderRadius: 4 }}>
+                  <div style={{ fontSize: 12, color: "#ff4f70", background: "rgba(255, 79, 112, 0.12)", padding: "8px 10px", borderRadius: 4 }}>
                     {c.lastSearchError}
                   </div>
                 )}
@@ -463,7 +463,7 @@ export default function CampaignsPanel({ onNotify }: CampaignsPanelProps) {
         </div>
       )}
 
-      <div style={{ marginTop: 22, textAlign: "center", fontSize: 13, color: "#7c8798", display: "flex", alignItems: "center", justifyContent: "center", gap: 8 }}>
+      <div style={{ marginTop: 22, textAlign: "center", fontSize: 13, color: "var(--fd-body-color)", display: "flex", alignItems: "center", justifyContent: "center", gap: 8 }}>
         <Target size={14} />
         <span>Busca automática no Google Maps com filtro mínimo de qualidade (nota 4,0 e 5 avaliações).</span>
       </div>
@@ -471,13 +471,13 @@ export default function CampaignsPanel({ onNotify }: CampaignsPanelProps) {
       {/* Modal Nova Busca */}
       {show && (
         <div className="fd-modal-backdrop" onClick={() => setShow(false)}>
-          <form className="fd-modal" style={{ padding: 26 }} onSubmit={create} onClick={e => e.stopPropagation()}>
+          <form className="fd-modal" style={{ padding: 24 }} onSubmit={create} onClick={e => e.stopPropagation()}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 18 }}>
               <div>
-                <h2 style={{ fontSize: 18, fontWeight: 500, color: "#1c2d41", margin: "0 0 4px" }}>
+                <h2 style={{ fontSize: 18, fontWeight: 500, color: "var(--fd-dark)", margin: "0 0 4px" }}>
                   Configurar busca automática
                 </h2>
-                <p style={{ fontSize: 13, color: "#7c8798", margin: 0 }}>
+                <p style={{ fontSize: 13, color: "var(--fd-body-color)", margin: 0 }}>
                   Uma busca inicial será enviada ao salvar.
                 </p>
               </div>
@@ -488,7 +488,7 @@ export default function CampaignsPanel({ onNotify }: CampaignsPanelProps) {
 
             <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
               <div>
-                <label style={{ display: "block", fontSize: 13, fontWeight: 500, color: "#1c2d41", marginBottom: 4 }}>
+                <label style={{ display: "block", fontSize: 13, fontWeight: 500, color: "var(--fd-dark)", marginBottom: 4 }}>
                   Nome da busca
                 </label>
                 <input
@@ -502,7 +502,7 @@ export default function CampaignsPanel({ onNotify }: CampaignsPanelProps) {
               </div>
 
               <div>
-                <label style={{ display: "block", fontSize: 13, fontWeight: 500, color: "#1c2d41", marginBottom: 4 }}>
+                <label style={{ display: "block", fontSize: 13, fontWeight: 500, color: "var(--fd-dark)", marginBottom: 4 }}>
                   Termos de busca (um por linha, até 8)
                 </label>
                 <textarea
@@ -516,7 +516,7 @@ export default function CampaignsPanel({ onNotify }: CampaignsPanelProps) {
               </div>
 
               <div>
-                <label style={{ display: "block", fontSize: 13, fontWeight: 500, color: "#1c2d41", marginBottom: 4 }}>
+                <label style={{ display: "block", fontSize: 13, fontWeight: 500, color: "var(--fd-dark)", marginBottom: 4 }}>
                   Cidade, região ou estado
                 </label>
                 <input
@@ -528,9 +528,9 @@ export default function CampaignsPanel({ onNotify }: CampaignsPanelProps) {
                 />
               </div>
 
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+              <div className="fd-form-grid-2">
                 <div>
-                  <label style={{ display: "block", fontSize: 13, fontWeight: 500, color: "#1c2d41", marginBottom: 4 }}>
+                  <label style={{ display: "block", fontSize: 13, fontWeight: 500, color: "var(--fd-dark)", marginBottom: 4 }}>
                     Código do país
                   </label>
                   <input
@@ -542,7 +542,7 @@ export default function CampaignsPanel({ onNotify }: CampaignsPanelProps) {
                   />
                 </div>
                 <div>
-                  <label style={{ display: "block", fontSize: 13, fontWeight: 500, color: "#1c2d41", marginBottom: 4 }}>
+                  <label style={{ display: "block", fontSize: 13, fontWeight: 500, color: "var(--fd-dark)", marginBottom: 4 }}>
                     Máximo por termo
                   </label>
                   <input
@@ -556,9 +556,9 @@ export default function CampaignsPanel({ onNotify }: CampaignsPanelProps) {
                 </div>
               </div>
 
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+              <div className="fd-form-grid-2">
                 <div>
-                  <label style={{ display: "block", fontSize: 13, fontWeight: 500, color: "#1c2d41", marginBottom: 4 }}>
+                  <label style={{ display: "block", fontSize: 13, fontWeight: 500, color: "var(--fd-dark)", marginBottom: 4 }}>
                     Presença de site
                   </label>
                   <select className="fd-input" value={form.websiteTarget} onChange={e => setForm({ ...form, websiteTarget: e.target.value })}>
@@ -568,7 +568,7 @@ export default function CampaignsPanel({ onNotify }: CampaignsPanelProps) {
                   </select>
                 </div>
                 <div>
-                  <label style={{ display: "block", fontSize: 13, fontWeight: 500, color: "#1c2d41", marginBottom: 4 }}>
+                  <label style={{ display: "block", fontSize: 13, fontWeight: 500, color: "var(--fd-dark)", marginBottom: 4 }}>
                     Frequência automática
                   </label>
                   <select className="fd-input" value={form.intervalHours} onChange={e => setForm({ ...form, intervalHours: Number(e.target.value) })}>

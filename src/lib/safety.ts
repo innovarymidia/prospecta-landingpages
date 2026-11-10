@@ -40,3 +40,20 @@ export function isOptOutMessage(text: string): boolean {
   return OPT_OUT_REGEX.test(text);
 }
 
+export function reopenedLeadStatus(initialSentAt: Date | string | null | undefined): "REPLIED" | "READY" {
+  return initialSentAt ? "REPLIED" : "READY";
+}
+
+export function isOutboundSystemEcho(
+  incomingText: string,
+  externalId: string | undefined,
+  recentOutbounds: Array<{ externalId?: string | null; body: string }>
+): boolean {
+  if (externalId && recentOutbounds.some(item => item.externalId && item.externalId === externalId)) {
+    return true;
+  }
+  const normalized = incomingText.trim();
+  if (!normalized) return false;
+  return recentOutbounds.some(item => item.body.trim() === normalized);
+}
+

@@ -16,10 +16,15 @@ export const metadata: Metadata = {
   },
 };
 
+const themeInitScript = `(function(){try{var t=localStorage.getItem('prospecta_theme');if(t==='dark'||(!t&&window.matchMedia('(prefers-color-scheme: dark)').matches)){document.documentElement.dataset.theme='dark';}else{document.documentElement.dataset.theme='light';}}catch(e){}})();`;
+
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
   return (
-    <html lang="pt-BR">
-      <body className={rubik.className}>{children}</body>
+    <html lang="pt-BR" suppressHydrationWarning>
+      <body className={rubik.className}>
+        <script dangerouslySetInnerHTML={{ __html: themeInitScript }} />
+        {children}
+      </body>
     </html>
   );
 }

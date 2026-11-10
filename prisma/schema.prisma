@@ -154,3 +154,14 @@ model SystemSetting {
 
   @@schema("prospeccao_wa")
 }
+
+model AdminUser {
+  id String @id @default(cuid())
+  email String @unique
+  passwordHash String
+  name String @default("Admin")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@schema("prospeccao_wa")
+}

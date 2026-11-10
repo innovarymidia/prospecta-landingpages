@@ -1,6 +1,7 @@
 "use client";
 
 import {
+  ArrowLeft,
   Bot,
   Copy,
   ExternalLink,
@@ -116,6 +117,7 @@ type Props = {
   onSendMessage: (e: React.FormEvent) => void;
   onPasteImage: (e: React.ClipboardEvent) => void;
   onToggleAiPause?: (paused: boolean) => void;
+  onBackMobile?: () => void;
   onClose?: () => void;
 };
 
@@ -143,6 +145,7 @@ export default function LeadConversationPane({
   onSendMessage,
   onPasteImage,
   onToggleAiPause,
+  onBackMobile,
   onClose,
 }: Props) {
   if (!lead && !loading) {
@@ -154,9 +157,9 @@ export default function LeadConversationPane({
           flexDirection: "column",
           alignItems: "center",
           justifyContent: "center",
-          padding: 40,
+          padding: 36,
           textAlign: "center",
-          color: "#7c8798",
+          color: "var(--fd-body-color)",
         }}
       >
         <div
@@ -164,8 +167,8 @@ export default function LeadConversationPane({
             width: 56,
             height: 56,
             borderRadius: "50%",
-            background: "#eef5ff",
-            color: "#5f76e8",
+            background: "var(--fd-active-chat-bg)",
+            color: "var(--fd-primary)",
             display: "grid",
             placeItems: "center",
             marginBottom: 14,
@@ -173,7 +176,7 @@ export default function LeadConversationPane({
         >
           <MessageSquare size={24} />
         </div>
-        <h4 style={{ fontSize: 16, fontWeight: 500, color: "#1c2d41", margin: "0 0 6px" }}>
+        <h4 style={{ fontSize: 16, fontWeight: 500, color: "var(--fd-dark)", margin: "0 0 6px" }}>
           Atendimento no WhatsApp
         </h4>
         <p style={{ fontSize: 13, margin: 0, maxWidth: 340 }}>
@@ -197,49 +200,63 @@ export default function LeadConversationPane({
       {/* Cabecalho da Empresa */}
       <div
         style={{
-          padding: "16px 22px",
-          borderBottom: "1px solid #edf2f9",
+          padding: "14px 18px",
+          borderBottom: "1px solid var(--fd-border-color)",
           display: "flex",
           justifyContent: "space-between",
           alignItems: "center",
-          gap: 12,
+          gap: 10,
+          flexWrap: "wrap",
         }}
       >
-        <div style={{ minWidth: 0 }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-            <h3
-              style={{
-                fontSize: 17,
-                fontWeight: 500,
-                color: "#1c2d41",
-                margin: 0,
-                overflow: "hidden",
-                textOverflow: "ellipsis",
-                whiteSpace: "nowrap",
-              }}
+        <div style={{ display: "flex", alignItems: "center", gap: 10, minWidth: 0, flex: "1 1 200px" }}>
+          {onBackMobile && (
+            <button
+              type="button"
+              onClick={onBackMobile}
+              className="fd-btn fd-btn-sm fd-chat-back-btn"
+              style={{ padding: "0 10px", flexShrink: 0 }}
+              title="Voltar para a lista de conversas"
             >
-              {lead?.company || lead?.name || "Carregando..."}
-            </h3>
-            {lead?.phone && (
-              <a
-                href={`https://wa.me/${lead.phone.replace(/\D/g, "")}`}
-                target="_blank"
-                rel="noreferrer"
-                style={{ color: "#5f76e8", display: "inline-flex" }}
-                title="Abrir no WhatsApp Web"
+              <ArrowLeft size={15} />
+            </button>
+          )}
+          <div style={{ minWidth: 0 }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+              <h3
+                style={{
+                  fontSize: 16,
+                  fontWeight: 500,
+                  color: "var(--fd-dark)",
+                  margin: 0,
+                  overflow: "hidden",
+                  textOverflow: "ellipsis",
+                  whiteSpace: "nowrap",
+                }}
               >
-                <ExternalLink size={15} />
-              </a>
-            )}
-          </div>
-          <div style={{ fontSize: 12, color: "#7c8798", marginTop: 3, display: "flex", gap: 8, flexWrap: "wrap" }}>
-            <span>{lead?.phone}</span>
-            {lead?.category && <span>· {lead.category}</span>}
-            {typeof lead?.rating === "number" && (
-              <span style={{ color: "#fb8c00", fontWeight: 500 }}>
-                ★ {lead.rating.toFixed(1)} ({lead.reviewsCount ?? 0} avaliações)
-              </span>
-            )}
+                {lead?.company || lead?.name || "Carregando..."}
+              </h3>
+              {lead?.phone && (
+                <a
+                  href={`https://wa.me/${lead.phone.replace(/\D/g, "")}`}
+                  target="_blank"
+                  rel="noreferrer"
+                  style={{ color: "var(--fd-primary)", display: "inline-flex", flexShrink: 0 }}
+                  title="Abrir no WhatsApp Web"
+                >
+                  <ExternalLink size={15} />
+                </a>
+              )}
+            </div>
+            <div style={{ fontSize: 12, color: "var(--fd-body-color)", marginTop: 2, display: "flex", gap: 8, flexWrap: "wrap" }}>
+              <span>{lead?.phone}</span>
+              {lead?.category && <span className="fd-hide-sm">· {lead.category}</span>}
+              {typeof lead?.rating === "number" && (
+                <span style={{ color: "#fb8c00", fontWeight: 500 }}>
+                  ★ {lead.rating.toFixed(1)} ({lead.reviewsCount ?? 0})
+                </span>
+              )}
+            </div>
           </div>
         </div>
 
@@ -249,7 +266,7 @@ export default function LeadConversationPane({
             onChange={e => onUpdateStatus(e.target.value)}
             disabled={updatingStatus || !lead}
             className="fd-input"
-            style={{ width: "auto", fontSize: 13, padding: "6px 10px" }}
+            style={{ width: "auto", maxWidth: 190, fontSize: 13, padding: "6px 10px" }}
             aria-label="Etapa da empresa"
           >
             {statusOptions.map(k => (
@@ -271,30 +288,30 @@ export default function LeadConversationPane({
       {lead && (
         <div
           style={{
-            padding: "14px 22px",
-            background: "#f9fbfd",
-            borderBottom: "1px solid #edf2f9",
+            padding: "12px 18px",
+            background: "var(--fd-surface-alt)",
+            borderBottom: "1px solid var(--fd-border-color)",
             display: "flex",
             flexDirection: "column",
             gap: 10,
           }}
         >
-          <div style={{ fontSize: 12, fontWeight: 500, color: "#1c2d41" }}>
+          <div style={{ fontSize: 12, fontWeight: 500, color: "var(--fd-dark)" }}>
             Passo 1: Link da prévia do site para este cliente
           </div>
 
-          <form onSubmit={onSavePreviewUrl} style={{ display: "flex", gap: 8, alignItems: "center" }}>
-            <div style={{ position: "relative", flex: 1 }}>
+          <form onSubmit={onSavePreviewUrl} style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+            <div style={{ position: "relative", flex: "1 1 200px" }}>
               <Link2
                 size={14}
-                style={{ position: "absolute", left: 10, top: "50%", transform: "translateY(-50%)", color: "#5f76e8" }}
+                style={{ position: "absolute", left: 10, top: "50%", transform: "translateY(-50%)", color: "var(--fd-primary)" }}
               />
               <input
                 className="fd-input"
                 style={{ paddingLeft: 32, fontSize: 13 }}
                 value={previewUrlInput}
                 onChange={e => onPreviewUrlInputChange(e.target.value)}
-                placeholder="Cole aqui o endereço do site modelo (https://...)"
+                placeholder="Cole o link do site modelo (https://...)"
               />
             </div>
             <button type="submit" className="fd-btn fd-btn-primary fd-btn-sm" disabled={savingPreview}>
@@ -313,18 +330,18 @@ export default function LeadConversationPane({
                 <button
                   type="button"
                   className="fd-btn fd-btn-sm"
-                  style={{ height: 26, padding: "0 10px" }}
+                  style={{ height: 28, padding: "0 10px" }}
                   onClick={onCopyTrackedUrl}
                   title="Copia o link com contagem de cliques para você testar ou mandar manual"
                 >
-                  <Copy size={11} /> Copiar link com rastreio
+                  <Copy size={11} /> Copiar link
                 </button>
                 <a
                   href={trackedUrl}
                   target="_blank"
                   rel="noreferrer"
                   style={{
-                    color: "#5f76e8",
+                    color: "var(--fd-primary)",
                     fontSize: 12,
                     fontWeight: 500,
                     display: "inline-flex",
@@ -336,8 +353,8 @@ export default function LeadConversationPane({
                 </a>
               </div>
             ) : (
-              <span style={{ fontSize: 12, color: "#7c8798" }}>
-                Depois de salvar o link, o sistema cria automaticamente o contador de cliques.
+              <span style={{ fontSize: 12, color: "var(--fd-body-color)" }}>
+                Depois de salvar o link, o sistema ativa o contador de cliques.
               </span>
             )}
 
@@ -348,8 +365,8 @@ export default function LeadConversationPane({
                     display: "flex",
                     alignItems: "center",
                     gap: 6,
-                    background: "#ffffff",
-                    border: "1px solid #e9ecef",
+                    background: "var(--fd-surface)",
+                    border: "1px solid var(--fd-border-color)",
                     borderRadius: 4,
                     padding: "3px 8px",
                   }}
@@ -368,7 +385,7 @@ export default function LeadConversationPane({
                       border: 0,
                       background: "transparent",
                       cursor: "pointer",
-                      color: "#7c8798",
+                      color: "var(--fd-body-color)",
                       padding: 0,
                       display: "grid",
                       placeItems: "center",
@@ -384,7 +401,7 @@ export default function LeadConversationPane({
                   title="Passo 2 (opcional): escolha uma imagem ou cole com Ctrl+V"
                 >
                   <Upload size={12} />
-                  <span>Passo 2: Enviar foto do site (opcional)</span>
+                  <span>Passo 2: Foto do site (opcional)</span>
                   <input
                     type="file"
                     accept="image/png,image/jpeg,image/webp"
@@ -406,16 +423,17 @@ export default function LeadConversationPane({
       {followUp.due && (
         <div
           style={{
-            padding: "10px 22px",
+            padding: "10px 18px",
             background: "rgba(253, 193, 106, 0.25)",
-            borderBottom: "1px solid #edf2f9",
+            borderBottom: "1px solid var(--fd-border-color)",
             display: "flex",
             justifyContent: "space-between",
             alignItems: "center",
             gap: 10,
+            flexWrap: "wrap",
           }}
         >
-          <span style={{ fontSize: 12, fontWeight: 500, color: "#1c2d41" }}>
+          <span style={{ fontSize: 12, fontWeight: 500, color: "var(--fd-dark)" }}>
             Sem resposta há {followUp.daysSinceSent} dias, sugerimos enviar o retorno de {followUp.due === "DAY_5" ? "5 dias" : "2 dias"}.
           </span>
           <button
@@ -433,7 +451,7 @@ export default function LeadConversationPane({
         style={{
           flex: 1,
           overflowY: "auto",
-          padding: "18px 22px",
+          padding: "16px 18px",
           display: "flex",
           flexDirection: "column",
           gap: 12,
@@ -441,23 +459,23 @@ export default function LeadConversationPane({
         }}
       >
         {loading ? (
-          <div style={{ textAlign: "center", padding: 40, color: "#7c8798", fontSize: 14 }}>
+          <div style={{ textAlign: "center", padding: 40, color: "var(--fd-body-color)", fontSize: 14 }}>
             Carregando conversa...
           </div>
         ) : lead?.messages?.length === 0 ? (
           <div
             style={{
               padding: 24,
-              background: "#f9fbfd",
-              borderRadius: 4,
-              border: "1px dashed #dee2e6",
+              background: "var(--fd-surface-alt)",
+              borderRadius: 6,
+              border: "1px dashed var(--fd-gray-300)",
               textAlign: "center",
             }}
           >
-            <div style={{ fontWeight: 500, fontSize: 15, color: "#1c2d41", marginBottom: 4 }}>
+            <div style={{ fontWeight: 500, fontSize: 15, color: "var(--fd-dark)", marginBottom: 4 }}>
               {lead.previewUrl ? "Passo 3: Tudo pronto para enviar no WhatsApp" : "Nenhuma mensagem enviada ainda"}
             </div>
-            <p style={{ fontSize: 13, color: "#7c8798", margin: "0 0 14px" }}>
+            <p style={{ fontSize: 13, color: "var(--fd-body-color)", margin: "0 0 14px" }}>
               {lead.previewUrl
                 ? "Clique abaixo para montar a mensagem de apresentação já com o link da empresa."
                 : "Salve o link da prévia no Passo 1 e depois clique abaixo para criar a mensagem."}
@@ -482,7 +500,7 @@ export default function LeadConversationPane({
                 />
               )}
               <div style={{ whiteSpace: "pre-wrap" }}>{msg.body}</div>
-              <div style={{ fontSize: 10, color: "#7c8798", marginTop: 4, textAlign: "right" }}>
+              <div style={{ fontSize: 10, color: "var(--fd-body-color)", marginTop: 4, textAlign: "right" }}>
                 {new Date(msg.createdAt).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}
                 {msg.direction === "OUTBOUND" && ` · ${msg.status === "SENT" ? "Enviada" : msg.status === "QUEUED" ? "Na fila" : msg.status}`}
               </div>
@@ -494,17 +512,17 @@ export default function LeadConversationPane({
       {/* Passo 3: Mensagem e Controle da IA */}
       <div
         style={{
-          padding: "14px 22px",
-          borderTop: "1px solid #edf2f9",
-          background: "#f9fbfd",
+          padding: "12px 18px",
+          borderTop: "1px solid var(--fd-border-color)",
+          background: "var(--fd-surface-alt)",
           display: "flex",
           flexDirection: "column",
           gap: 10,
         }}
       >
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
-            <span style={{ display: "inline-flex", alignItems: "center", gap: 5, fontSize: 13, fontWeight: 500, color: "#5f76e8" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+            <span style={{ display: "inline-flex", alignItems: "center", gap: 5, fontSize: 13, fontWeight: 500, color: "var(--fd-primary)" }}>
               <Bot size={15} /> Passo 3: Mensagem
             </span>
             {lead && (
@@ -514,7 +532,7 @@ export default function LeadConversationPane({
                 </span>
               ) : lead.aiPausedAt ? (
                 <>
-                  <span className="fd-badge-pill warning">IA pausada (você assumiu)</span>
+                  <span className="fd-badge-pill warning">IA pausada</span>
                   {onToggleAiPause && (
                     <button
                       type="button"
@@ -529,7 +547,7 @@ export default function LeadConversationPane({
                 </>
               ) : lead.initialSentAt ? (
                 <>
-                  <span className="fd-badge-pill success">IA respondendo automático</span>
+                  <span className="fd-badge-pill success">IA ativa</span>
                   {onToggleAiPause && (
                     <button
                       type="button"
@@ -545,15 +563,15 @@ export default function LeadConversationPane({
               ) : null
             )}
             {lead?.previewImage && (
-              <label style={{ display: "inline-flex", alignItems: "center", gap: 5, fontSize: 12, fontWeight: 500, cursor: "pointer", color: "#1c2d41" }}>
+              <label style={{ display: "inline-flex", alignItems: "center", gap: 5, fontSize: 12, fontWeight: 500, cursor: "pointer", color: "var(--fd-dark)" }}>
                 <input
                   type="checkbox"
                   checked={includePreviewImage}
                   onChange={e => onIncludePreviewImageChange(e.target.checked)}
-                  style={{ accentColor: "#5f76e8" }}
+                  style={{ accentColor: "var(--fd-primary)" }}
                 />
                 <ImageIcon size={13} />
-                <span>Enviar foto junto</span>
+                <span>Enviar foto</span>
               </label>
             )}
           </div>
@@ -564,7 +582,7 @@ export default function LeadConversationPane({
             onClick={onRequestAiDraft}
             disabled={generatingDraft || !lead}
           >
-            <Sparkles size={12} style={{ color: "#5f76e8" }} />
+            <Sparkles size={12} style={{ color: "var(--fd-primary)" }} />
             {generatingDraft ? "Criando..." : "Sugerir Mensagem"}
           </button>
         </div>
@@ -572,7 +590,7 @@ export default function LeadConversationPane({
         <form onSubmit={onSendMessage} style={{ display: "flex", gap: 8, alignItems: "flex-end" }}>
           <textarea
             className="fd-textarea"
-            rows={3}
+            rows={2}
             value={composerText}
             onChange={e => onComposerTextChange(e.target.value)}
             onKeyDown={e => {
@@ -583,11 +601,11 @@ export default function LeadConversationPane({
           <button
             type="submit"
             className="fd-btn fd-btn-primary fd-btn-rounded"
-            style={{ height: 40, padding: "0 18px", flexShrink: 0 }}
+            style={{ height: 40, padding: "0 16px", flexShrink: 0 }}
             disabled={sendingMsg || !composerText.trim() || !lead}
           >
             <Send size={14} />
-            <span>{sendingMsg ? "Enviando..." : "Enviar"}</span>
+            <span>{sendingMsg ? "..." : "Enviar"}</span>
           </button>
         </form>
       </div>

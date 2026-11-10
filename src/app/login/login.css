@@ -150,3 +150,28 @@
     display: none;
   }
 }
+
+html[data-theme="dark"] .login-page {
+  background: #0f172a;
+}
+html[data-theme="dark"] .login-auth-box,
+html[data-theme="dark"] .login-card-right {
+  background: #182235;
+}
+html[data-theme="dark"] .login-intro h1,
+html[data-theme="dark"] .login-label {
+  color: #f1f5f9;
+}
+html[data-theme="dark"] .login-input-wrap {
+  background: #121a2a;
+  border-color: #293548;
+}
+html[data-theme="dark"] .login-input-wrap input {
+  color: #cbd5e1;
+}
+html[data-theme="dark"] .login-security {
+  border-top-color: #263246;
+}
+html[data-theme="dark"] .login-submit {
+  background: #5f76e8;
+}

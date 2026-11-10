@@ -1,13 +1,94 @@
 import { inngest } from "./client";
 import { db } from "@/lib/db";
-import { generateReply } from "@/lib/ai";
-import { sendMedia, sendText } from "@/lib/evolution";
+import { generateReply, transcribeAudio } from "@/lib/ai";
+import { getMediaBase64, sendMedia, sendText } from "@/lib/evolution";
 import { buildTrackedPreviewUrl, pickNextQueueCampaignId } from "@/lib/sniper";
 import { importSearchResults, pollSearch, submitSearch } from "@/lib/outscraper";
-import { getInboundBufferSeconds, isLeadBlocked, shouldAiAutoReply } from "@/lib/safety";
+import { getInboundBufferSeconds, isLeadBlocked, isOptOutMessage, shouldAiAutoReply } from "@/lib/safety";
 import { getMessagingEnabled } from "@/lib/settings";
 
 const inboundBufferSeconds = getInboundBufferSeconds(process.env.INBOUND_BUFFER_SECONDS);
+
+export const transcribeInboundAudio = inngest.createFunction(
+  {
+    id: "prospecta-transcribe-audio",
+    concurrency: { limit: 1, key: "event.data.leadId" },
+    retries: 3,
+  },
+  { event: "prospecta/audio.transcribe" },
+  async ({ event, step }) => {
+    const { leadId, messageId, audioKey, audioBase64, audioMimeType } = event.data as {
+      leadId: string;
+      messageId: string;
+      audioKey?: { id: string; remoteJid?: string };
+      audioBase64?: string;
+      audioMimeType?: string;
+    };
+
+    const transcribed = await step.run("transcribe-whatsapp-audio", async () => {
+      let base64 = audioBase64 || "";
+      let mime = audioMimeType || "audio/ogg";
+      if (!base64 && audioKey?.id) {
+        const downloaded = await getMediaBase64({ id: audioKey.id, remoteJid: audioKey.remoteJid, fromMe: false });
+        if (downloaded) {
+          base64 = downloaded.base64;
+          mime = downloaded.mimetype;
+        }
+      }
+      if (!base64) return null;
+      return transcribeAudio(base64, mime);
+    });
+
+    const outcome = await step.run("save-audio-transcription", async () => {
+      const lead = await db.lead.findUnique({ where: { id: leadId } });
+      if (!lead) return { skipped: true };
+
+      if (!transcribed) {
+        await db.message.updateMany({
+          where: { id: messageId },
+          data: { body: "[Áudio recebido (transcrição indisponível)]" },
+        });
+        return { unreadable: true };
+      }
+
+      if (isOptOutMessage(transcribed)) {
+        await db.$transaction([
+          db.message.updateMany({
+            where: { id: messageId },
+            data: { body: `[Áudio transcrito]: ${transcribed}` },
+          }),
+          db.suppression.upsert({
+            where: { phone: lead.phone },
+            create: { phone: lead.phone, reason: "Pedido de opt-out em áudio" },
+            update: { reason: "Pedido de opt-out em áudio" },
+          }),
+          db.lead.update({
+            where: { id: lead.id },
+            data: { status: "OPTED_OUT", optOutAt: new Date() },
+          }),
+        ]);
+        return { optedOut: true };
+      }
+
+      await db.message.updateMany({
+        where: { id: messageId },
+        data: { body: `[Áudio transcrito]: ${transcribed}` },
+      });
+
+      return { queueReply: shouldAiAutoReply(lead) };
+    });
+
+    if ("queueReply" in outcome && outcome.queueReply) {
+      await step.sendEvent("queue-transcribed-message", {
+        id: `inbound-${messageId}`,
+        name: "prospecta/message.received",
+        data: { leadId, messageId },
+      });
+    }
+
+    return outcome;
+  }
+);
 
 export const processInbound = inngest.createFunction(
   {
@@ -33,6 +114,7 @@ export const processInbound = inngest.createFunction(
       if (suppression) return null;
       const latestInbound = lead.messages.find(m => m.direction === "INBOUND");
       if (!latestInbound || latestInbound.id !== messageId) return null;
+      if (latestInbound.body.startsWith("[Áudio recebido")) return null;
       const history = lead.messages
         .slice()
         .reverse()
@@ -230,4 +312,4 @@ export const searchCampaign = inngest.createFunction(
   }
 );
 
-export const functions = [processInbound, sendOutbound, queueDueSearches, searchCampaign];
+export const functions = [transcribeInboundAudio, processInbound, sendOutbound, queueDueSearches, searchCampaign];
