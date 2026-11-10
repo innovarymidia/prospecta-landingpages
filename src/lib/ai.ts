@@ -65,17 +65,18 @@ DADOS REAIS DO PROSPECT:
 - Observações do operador: ${lead.notes || "nenhuma"}
 - LINK EXATO DA PRÉVIA PRONTA (INCLUA OBRIGATORIAMENTE): ${previewLink}
 
-ESTRATÉGIA OBRIGATÓRIA (MODO SNIPER - ENTREGA DIRETA):
+ESTRATÉGIA OBRIGATÓRIA (MODO SNIPER DE ENTREGA DIRETA):
 1. NÃO peça permissão ("posso mandar o link?"). Entregue o valor direto, porque o site já está pronto (e um print da página vai anexado junto com essa mensagem).
 2. Deixe claro que não é disparo genérico: cite algo específico do negócio (a reputação real no Google se >= 4.2, ou a cidade/nicho).
-3. Fale a língua prática do negócio (ex.: para locadoras/serviços B2B: aparecer para quem busca no Google, evitar equipamento/frota parada e receber cotação rápida no WhatsApp).
-4. Quem atende o WhatsApp comercial quase sempre é atendente/balcão/secretária: termine pedindo com simpatia para ela encaminhar ao dono/sócio/gerente dar uma olhada sem compromisso.
+3. Fale a língua prática do negócio (ex.: para locadoras e serviços B2B: aparecer para quem busca no Google, evitar equipamento ou frota parada e receber cotação rápida no WhatsApp).
+4. Quem atende o WhatsApp comercial quase sempre é atendente, balcão ou secretária: termine pedindo com simpatia para ela encaminhar ao dono, sócio ou gerente dar uma olhada sem compromisso.
 5. NUNCA mencione preço (R$ 1.200) nem termos técnicos ("Vercel", "Next.js") na primeira mensagem.
-6. Curta e direta: 3 a 4 linhas fáceis de ler no celular, linguagem brasileira natural, sem cara de vendedor chato e sem excesso de emojis.
-7. Responda EXCLUSIVAMENTE com o texto pronto da mensagem (incluindo o link ${previewLink} sem alterações).`
+6. NUNCA use o caractere "e comercial" nem travessões em nenhuma mensagem. Use "e", vírgula ou quebra de linha.
+7. Curta e direta: 3 a 4 linhas fáceis de ler no celular, linguagem brasileira natural, sem cara de vendedor chato e sem excesso de emojis.
+8. Responda EXCLUSIVAMENTE com o texto pronto da mensagem (incluindo o link ${previewLink} sem alterações).`
       : `Você é um especialista em prospecção B2B pelo WhatsApp no Brasil.
 Redija uma primeira mensagem ULTRA CURTA (2 a 3 frases) para o WhatsApp comercial da empresa "${company}" (${lead.category || "Serviços B2B"}).
-Lembre-se: quem atende normalmente é atendente/secretária. Seja humano, natural, sem textão, sem mencionar preços ou jargões técnicos, perguntando quem cuida da parte de novos orçamentos/site por lá.
+Lembre-se: quem atende normalmente é atendente ou secretária. Seja humano, natural, sem textão, sem mencionar preços ou jargões técnicos, e NUNCA use "e comercial" nem travessões, perguntando quem cuida da parte de novos orçamentos e site por lá.
 Responda EXCLUSIVAMENTE com o texto da mensagem.`;
 
     const result = await model.generateContent(prompt);
@@ -123,6 +124,7 @@ COMO CONDUZIR A CONVERSA:
 
 DIRETRIZES DE ESTILO:
 - Máximo de 2 a 4 linhas por mensagem. Linguagem natural de WhatsApp brasileiro.
+- NUNCA use o caractere "e comercial" nem travessões em nenhuma mensagem. Use "e" ou vírgulas normalmente.
 - NUNCA invente funcionalidades não pedidas nem mencione nomes de plataformas de hospedagem internas.
 - Responda apenas com a mensagem final.`;
 

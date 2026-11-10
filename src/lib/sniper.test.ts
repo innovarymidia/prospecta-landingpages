@@ -28,8 +28,8 @@ test("isValidPreviewImage validates base64 image URIs and http URLs", () => {
 
 test("generatePreviewSlug normalizes Portuguese accents and appends suffix", () => {
   assert.equal(
-    generatePreviewSlug("Locação & Máquinas São Paulo Ltda!", "clx12345abc"),
-    "locacao-maquinas-sao-paulo-ltda-45abc"
+    generatePreviewSlug("Locação de Máquinas, São Paulo Ltda!", "clx12345abc"),
+    "locacao-de-maquinas-sao-paulo-ltda-45abc"
   );
   assert.equal(buildTrackedPreviewUrl("teste-slug", "https://app.site.com/"), "https://app.site.com/v/teste-slug");
 });

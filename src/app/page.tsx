@@ -2,28 +2,30 @@
 
 import { useEffect, useMemo, useState } from "react";
 import {
-  Activity,
-  ArrowUpRight,
+  Bell,
   Bot,
+  Clock,
   Copy,
+  DollarSign,
   ExternalLink,
   Eye,
-  Flame,
+  FilePlus,
+  Globe,
+  Home as HomeIcon,
   Image as ImageIcon,
-  LayoutDashboard,
   Link2,
   LogOut,
   MapPin,
   MessageSquare,
-  Moon,
   Plus,
   RefreshCw,
   Search,
   Send,
   ShieldBan,
   Sparkles,
-  Sun,
+  Tag,
   Upload,
+  UserPlus,
   X,
 } from "lucide-react";
 import {
@@ -85,20 +87,22 @@ type SystemStatus = {
   businessOffer: string;
 };
 
-const statusConfig: Record<string, { label: string; dotClass: string; badgeClass: string }> = {
-  NEW: { label: "Novo Lead", dotClass: "gray", badgeClass: "gray" },
-  READY: { label: "Selecionado", dotClass: "blue", badgeClass: "blue" },
-  BUILDING: { label: "Montando Prévia", dotClass: "purple", badgeClass: "purple" },
-  DEMO_READY: { label: "Prévia Pronta", dotClass: "pink", badgeClass: "pink" },
-  SENT: { label: "Prévia Enviada", dotClass: "yellow", badgeClass: "yellow" },
-  REPLIED: { label: "Respondeu", dotClass: "green", badgeClass: "green" },
-  QUALIFIED: { label: "Qualificado", dotClass: "blue", badgeClass: "blue" },
-  MEETING: { label: "Reunião Marcada", dotClass: "purple", badgeClass: "purple" },
-  WON: { label: "Cliente Fechado", dotClass: "green", badgeClass: "green" },
-  LOST: { label: "Encerrado", dotClass: "gray", badgeClass: "gray" },
-  OPTED_OUT: { label: "Opt-out", dotClass: "gray", badgeClass: "red" },
-  BLOCKED: { label: "Bloqueado", dotClass: "gray", badgeClass: "red" },
+const statusConfig: Record<string, { label: string; color: string }> = {
+  NEW: { label: "Novo Lead", color: "#b8c3d5" },
+  READY: { label: "Selecionado", color: "#5f76e8" },
+  BUILDING: { label: "Montando Prévia", color: "#01caf1" },
+  DEMO_READY: { label: "Prévia Pronta", color: "#5f76e8" },
+  SENT: { label: "Prévia Enviada", color: "#fdc16a" },
+  REPLIED: { label: "Respondeu", color: "#22ca80" },
+  QUALIFIED: { label: "Qualificado", color: "#01caf1" },
+  MEETING: { label: "Reunião Marcada", color: "#5f76e8" },
+  WON: { label: "Cliente Fechado", color: "#22ca80" },
+  LOST: { label: "Encerrado", color: "#b8c3d5" },
+  OPTED_OUT: { label: "Opt out", color: "#ff4f70" },
+  BLOCKED: { label: "Bloqueado", color: "#ff4f70" },
 };
+
+const avatarPalette = ["#5f76e8", "#ff4f70", "#01caf1", "#22ca80", "#fdc16a"];
 
 async function compressScreenshotToDataUrl(file: File): Promise<string> {
   const bitmap = await createImageBitmap(file);
@@ -122,7 +126,6 @@ function getInitials(label: string): string {
 }
 
 export default function Home() {
-  const [theme, setTheme] = useState<"light" | "dark">("light");
   const [activeTab, setActiveTab] = useState<"leads" | "suppressions">("leads");
   const [stageFilter, setStageFilter] = useState<string>("ALL");
   const [leads, setLeads] = useState<Lead[]>([]);
@@ -135,7 +138,7 @@ export default function Home() {
     phone: "",
     company: "",
     website: "",
-    category: "Locação de Máquinas / Equipamentos",
+    category: "Locação de Máquinas e Equipamentos",
     address: "",
     rating: "",
     reviewsCount: "",
@@ -149,7 +152,7 @@ export default function Home() {
 
   const [systemStatus, setSystemStatus] = useState<SystemStatus | null>(null);
 
-  // Offcanvas Drawer
+  // Chat slide over drawer
   const [selectedLeadId, setSelectedLeadId] = useState<string | null>(null);
   const [activeLead, setActiveLead] = useState<LeadDetail | null>(null);
   const [loadingChat, setLoadingChat] = useState(false);
@@ -160,10 +163,6 @@ export default function Home() {
   const [previewUrlInput, setPreviewUrlInput] = useState("");
   const [savingPreview, setSavingPreview] = useState(false);
   const [includePreviewImage, setIncludePreviewImage] = useState(true);
-
-  useEffect(() => {
-    document.documentElement.setAttribute("data-bs-theme", theme);
-  }, [theme]);
 
   function notify(s: string) {
     setToast(s);
@@ -395,7 +394,7 @@ export default function Home() {
     const link = getTrackedLink(activeLead);
     setComposerText(buildFollowUpSuggestion(company, stage, link));
     setIncludePreviewImage(false);
-    notify(stage === "DAY_5" ? "Follow-up de encerramento (Dia +5) carregado!" : "Follow-up de utilidade (Dia +2) carregado!");
+    notify(stage === "DAY_5" ? "Follow up de encerramento (Dia 5) carregado!" : "Follow up de utilidade (Dia 2) carregado!");
   }
 
   async function handleSendMessage(e: React.FormEvent) {
@@ -415,7 +414,7 @@ export default function Home() {
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Erro ao enfileirar mensagem");
 
-      notify(data.hasMedia ? "Print da prévia + mensagem enviados para a fila!" : "Mensagem enviada para a fila do WhatsApp!");
+      notify(data.hasMedia ? "Print da prévia e mensagem enviados para a fila!" : "Mensagem enviada para a fila do WhatsApp!");
       setComposerText("");
       setIncludePreviewImage(false);
       const refreshRes = await fetch(`/api/leads/${activeLead.id}`);
@@ -499,7 +498,7 @@ export default function Home() {
         phone: "",
         company: "",
         website: "",
-        category: "Locação de Máquinas / Equipamentos",
+        category: "Locação de Máquinas e Equipamentos",
         address: "",
         rating: "",
         reviewsCount: "",
@@ -515,7 +514,7 @@ export default function Home() {
     }
   }
 
-  // Estatísticas Reais (Sniper + Views Rastreadas)
+  // Métricas Reais
   const totalLeads = leads.length;
   const goldCount = leads.filter(l => getLeadGoldScore(l).isGold).length;
   const demoCount = leads.filter(l => l.status === "BUILDING" || l.status === "DEMO_READY" || Boolean(l.previewUrl)).length;
@@ -528,9 +527,9 @@ export default function Home() {
   const wonCount = leads.filter(l => l.status === "WON").length;
 
   const goldPct = totalLeads > 0 ? Math.round((goldCount / totalLeads) * 100) : 0;
-  const demoPct = totalLeads > 0 ? Math.round((demoCount / totalLeads) * 100) : 0;
   const viewsPct = sentCount > 0 ? Math.min(100, Math.round((viewedLeadsCount / sentCount) * 100)) : 0;
   const metaPct = Math.min(100, Math.round((wonCount / 10) * 100));
+  const monthlyRevenue = wonCount * 1200;
 
   const filtered = useMemo(() => {
     return leads.filter(l => {
@@ -551,620 +550,820 @@ export default function Home() {
   }, [leads, query, stageFilter]);
 
   return (
-    <div className="tblr-page">
-      {/* Toast Notification */}
+    <div className="fd-main-wrapper">
+      {/* Toast */}
       {toast && (
         <div
           style={{
             position: "fixed",
-            bottom: 20,
-            right: 20,
-            background: "var(--tblr-body-color)",
-            color: "var(--tblr-bg-surface)",
-            padding: "10px 16px",
-            borderRadius: "6px",
-            fontWeight: 600,
+            bottom: 24,
+            right: 24,
+            background: "#1c2d41",
+            color: "#ffffff",
+            padding: "12px 18px",
+            borderRadius: 60,
+            fontWeight: 500,
             fontSize: 13,
-            boxShadow: "0 10px 25px rgba(0, 0, 0, 0.2)",
+            boxShadow: "0 10px 25px rgba(28, 45, 65, 0.25)",
             zIndex: 9999,
             display: "flex",
             alignItems: "center",
             gap: 8,
           }}
         >
-          <Sparkles size={15} style={{ color: "var(--tblr-azure)" }} />
+          <Sparkles size={15} style={{ color: "#01caf1" }} />
           {toast}
         </div>
       )}
 
-      {/* Tabler Vertical Sidebar */}
-      <aside className="tblr-sidebar">
-        <a href="/" className="tblr-brand">
-          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 68 68" width="28" height="28" aria-label="Prospecta">
-            <path
-              d="M64.6 16.2C63 9.9 58.1 5 51.8 3.4 40 1.5 28 1.5 16.2 3.4 9.9 5 5 9.9 3.4 16.2 1.5 28 1.5 40 3.4 51.8 5 58.1 9.9 63 16.2 64.6c11.8 1.9 23.8 1.9 35.6 0C58.1 63 63 58.1 64.6 51.8c1.9-11.8 1.9-23.8 0-35.6zM33.3 36.3c-2.8 4.4-6.6 8.2-11.1 11-1.5.9-3.3.9-4.8.1s-2.4-2.3-2.5-4c0-1.7.9-3.3 2.4-4.1 2.3-1.4 4.4-3.2 6.1-5.3-1.8-2.1-3.8-3.8-6.1-5.3-2.3-1.3-3-4.2-1.7-6.4s4.3-2.9 6.5-1.6c4.5 2.8 8.2 6.5 11.1 10.9 1 1.4 1 3.3.1 4.7zM49.2 46H37.8c-2.1 0-3.8-1-3.8-3s1.7-3 3.8-3h11.4c2.1 0 3.8 1 3.8 3s-1.7 3-3.8 3z"
-              fill="var(--tblr-primary)"
-            />
-          </svg>
-          <div>
-            <div className="tblr-brand-title">Prospecta</div>
-            <div className="tblr-brand-sub">Rental B2B CRM</div>
-          </div>
-        </a>
-
-        <nav className="tblr-nav-list">
-          <div className="tblr-nav-section">Operação Sniper</div>
-          <button
-            className={`tblr-nav-link ${activeTab === "leads" && stageFilter === "ALL" ? "active" : ""}`}
-            onClick={() => {
-              setActiveTab("leads");
-              setStageFilter("ALL");
-            }}
-          >
-            <LayoutDashboard size={16} />
-            <span>Visão Geral</span>
-            <span className="tblr-nav-badge">{totalLeads}</span>
-          </button>
-
-          <button
-            className={`tblr-nav-link ${activeTab === "leads" && stageFilter === "GOLD" ? "active" : ""}`}
-            onClick={() => {
-              setActiveTab("leads");
-              setStageFilter("GOLD");
-            }}
-          >
-            <Flame size={16} />
-            <span>Leads Ouro</span>
-            <span className="tblr-nav-badge primary">{goldCount}</span>
-          </button>
-
-          <button
-            className={`tblr-nav-link ${activeTab === "leads" && stageFilter === "DEMO" ? "active" : ""}`}
-            onClick={() => {
-              setActiveTab("leads");
-              setStageFilter("DEMO");
-            }}
-          >
-            <Eye size={16} />
-            <span>Prévias Prontas</span>
-            <span className="tblr-nav-badge">{demoCount}</span>
-          </button>
-
-          <button
-            className={`tblr-nav-link ${activeTab === "leads" && stageFilter === "FOLLOWUP" ? "active" : ""}`}
-            onClick={() => {
-              setActiveTab("leads");
-              setStageFilter("FOLLOWUP");
-            }}
-          >
-            <Activity size={16} />
-            <span>Follow-up 2d/5d</span>
-            {followUpCount > 0 && <span className="tblr-nav-badge warning">{followUpCount}</span>}
-          </button>
-
-          <button
-            className={`tblr-nav-link ${activeTab === "leads" && stageFilter === "REPLIED" ? "active" : ""}`}
-            onClick={() => {
-              setActiveTab("leads");
-              setStageFilter("REPLIED");
-            }}
-          >
-            <MessageSquare size={16} />
-            <span>Em Negociação</span>
-            <span className="tblr-nav-badge">{repliedCount}</span>
-          </button>
-
-          <div className="tblr-nav-section">Captação & Controle</div>
-          <a className="tblr-nav-link" href="/campaigns">
-            <MapPin size={16} />
-            <span>Buscas Maps (Outscraper)</span>
-          </a>
-
-          <button
-            className={`tblr-nav-link ${activeTab === "suppressions" ? "active" : ""}`}
-            onClick={() => setActiveTab("suppressions")}
-          >
-            <ShieldBan size={16} />
-            <span>Lista de Supressão</span>
-            <span className="tblr-nav-badge">{suppressions.length}</span>
-          </button>
-        </nav>
-
-        <div className="tblr-sidebar-footer">
-          <div className="tblr-user-box">
-            <div className="tblr-avatar">IN</div>
-            <div style={{ minWidth: 0 }}>
-              <div style={{ fontSize: 13, fontWeight: 600, color: "var(--tblr-body-color)" }}>Innovary</div>
-              <div style={{ fontSize: 11, color: "var(--tblr-secondary)" }}>Meta: 10 sites/mês</div>
-            </div>
-          </div>
-
-          <button
-            onClick={async () => {
-              await fetch("/api/auth/logout", { method: "POST" });
-              location.assign("/login");
-            }}
-            className="tblr-nav-link"
-            style={{ color: "var(--tblr-red)" }}
-          >
-            <LogOut size={15} />
-            <span>Sair do painel</span>
-          </button>
-        </div>
-      </aside>
-
-      {/* Main Content Wrapper */}
-      <div className="tblr-page-wrapper">
-        {/* Top Utility Header */}
-        <header className="tblr-topbar">
-          <div style={{ position: "relative", width: "min(360px, 100%)" }}>
-            <Search
-              size={15}
-              style={{ position: "absolute", left: 11, top: "50%", transform: "translateY(-50%)", color: "var(--tblr-muted)" }}
-            />
-            <input
-              className="tblr-input"
-              style={{ paddingLeft: 34 }}
-              placeholder="Buscar empresa, cidade, WhatsApp ou nicho..."
-              value={query}
-              onChange={e => setQuery(e.target.value)}
-            />
-          </div>
-
-          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-            <span className={`tblr-badge ${systemStatus?.automationEnabled ? "green" : "yellow"}`}>
-              <span className={`tblr-status-dot ${systemStatus?.automationEnabled ? "green" : "yellow"}`} />
-              {systemStatus?.automationEnabled ? "Evolution API Ativa" : "Envios Pausados"}
+      {/* Topbar Header (Exact FreeDash 80px Fixed Header) */}
+      <header className="fd-topbar">
+        <div className="fd-navbar-header">
+          <a href="/" className="fd-navbar-brand">
+            <svg width="32" height="32" viewBox="0 0 36 44" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <path
+                d="M8.94981 23.8836C17.1535 22.0444 21.8606 18.63 23.1886 17.1527C25.1125 19.7791 23.5006 24.7713 22.4542 26.9391C19.9436 30.6278 9.57181 33.6852 9.35294 33.8456C5.33665 36.9488 9.0603 41.9613 9.23039 42.1733C9.23088 42.1734 9.23137 42.1735 9.23186 42.1737C9.23842 42.1826 9.23765 42.1823 9.23039 42.1733C5.05462 41.0619 2.48669 36.4087 1.72464 34.2207C0.0360044 28.059 5.83782 24.7619 8.94981 23.8836Z"
+                fill="#00B0FF"
+              />
+              <path
+                d="M19.2543 18.6806C5.84573 22.0456 2.3459 26.3581 2.27206 28.0937C0.567018 20.2601 3.11893 17.16 4.67094 15.0703C5.75714 13.0639 13.9224 10.8693 17.506 9.86971C23.1659 8.41418 27.6286 5.09151 29.5156 3.76525C32.8828 13.1366 24.0777 17.6135 19.2543 18.6806Z"
+                fill="#615DFF"
+              />
+            </svg>
+            <span style={{ fontSize: 20, fontWeight: 700, color: "#1c2d41", letterSpacing: "-0.02em" }}>
+              Prospecta
             </span>
+          </a>
+        </div>
+
+        <div className="fd-navbar-collapse">
+          <div style={{ display: "flex", alignItems: "center", gap: 18 }}>
+            <button
+              className="fd-btn"
+              style={{ border: 0, background: "transparent", padding: "0 6px", position: "relative" }}
+              onClick={() => setStageFilter(followUpCount > 0 ? "FOLLOWUP" : "ALL")}
+              title="Pendências de Follow up e Views"
+            >
+              <Bell size={20} style={{ color: "#7c8798" }} />
+              <span
+                className="fd-badge-pill primary"
+                style={{ position: "absolute", top: -2, right: -4, fontSize: 10, padding: "2px 6px", lineHeight: 1 }}
+              >
+                {followUpCount + viewedLeadsCount}
+              </span>
+            </button>
+
+            <select
+              className="fd-pill-select"
+              value={stageFilter}
+              onChange={e => {
+                setActiveTab("leads");
+                setStageFilter(e.target.value);
+              }}
+              aria-label="Filtro rápido de etapa"
+            >
+              <option value="ALL">Todas as Etapas</option>
+              <option value="GOLD">Leads Ouro (Sem Site)</option>
+              <option value="DEMO">Prévias Prontas</option>
+              <option value="SENT">Prévias Enviadas</option>
+              <option value="FOLLOWUP">Follow up Pendente</option>
+              <option value="REPLIED">Em Negociação</option>
+              <option value="WON">Clientes Fechados</option>
+            </select>
+
+            <span
+              className={`fd-badge-pill ${systemStatus?.automationEnabled ? "success" : "warning"}`}
+              style={{ fontSize: 12 }}
+            >
+              {systemStatus?.automationEnabled ? "WhatsApp Conectado" : "Envios Pausados"}
+            </span>
+          </div>
+
+          <div style={{ display: "flex", alignItems: "center", gap: 18 }}>
+            <div className="fd-customize-input">
+              <input
+                className="fd-pill-input"
+                type="search"
+                placeholder="Pesquisar empresa"
+                value={query}
+                onChange={e => setQuery(e.target.value)}
+              />
+              <Search
+                size={18}
+                style={{ position: "absolute", right: 16, top: "50%", transform: "translateY(-50%)", color: "#7c8798" }}
+              />
+            </div>
 
             <button
-              className="tblr-btn tblr-btn-icon"
-              onClick={() => setTheme(t => (t === "light" ? "dark" : "light"))}
-              title={theme === "light" ? "Modo escuro Tabler" : "Modo claro Tabler"}
+              onClick={() => loadLeads()}
+              className="fd-btn"
+              style={{ border: 0, background: "transparent", padding: 6 }}
+              title="Atualizar dados"
             >
-              {theme === "light" ? <Moon size={15} /> : <Sun size={15} />}
+              <RefreshCw size={18} style={{ color: "#7c8798" }} />
             </button>
 
-            <button className="tblr-btn tblr-btn-icon" onClick={() => loadLeads()} title="Atualizar dados">
-              <RefreshCw size={15} />
-            </button>
-          </div>
-        </header>
-
-        <main className="tblr-container">
-          {/* Tabler Page Header */}
-          <div className="tblr-page-header">
-            <div>
-              <div className="tblr-page-pretitle">
-                {activeTab === "leads" ? "VISÃO GERAL · RENTAL B2B (LOCADORAS)" : "CONFORMIDADE E OPT-OUT"}
+            <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+              <img
+                src="/freedash/profile-pic.jpg"
+                alt="Operador"
+                width={40}
+                height={40}
+                style={{ borderRadius: "50%", objectFit: "cover" }}
+              />
+              <div style={{ lineHeight: 1.2 }}>
+                <span style={{ fontSize: 13, color: "#7c8798" }}>Olá, </span>
+                <span style={{ fontSize: 14, fontWeight: 500, color: "#1c2d41" }}>Innovary</span>
               </div>
-              <h1 className="tblr-page-title">
-                {activeTab === "leads" ? "Painel de Prospecção & Prévias" : "Lista de Supressão"}
-              </h1>
             </div>
+          </div>
+        </div>
+      </header>
 
-            <div style={{ display: "flex", gap: 8 }}>
-              <a href="/campaigns" className="tblr-btn">
-                <MapPin size={14} />
-                <span>Buscas Maps</span>
-              </a>
-              <button className="tblr-btn tblr-btn-primary" onClick={() => setShowAddModal(true)}>
-                <Plus size={15} />
-                <span>Novo Lead</span>
+      {/* Left Sidebar (FreeDash Skin6 with Signature Purple Gradient Selected Pill) */}
+      <aside className="fd-left-sidebar">
+        <nav className="fd-sidebar-nav">
+          <ul className="fd-sidebar-ul">
+            <li className={`fd-sidebar-item ${activeTab === "leads" && stageFilter === "ALL" ? "selected" : ""}`}>
+              <button
+                className="fd-sidebar-link"
+                onClick={() => {
+                  setActiveTab("leads");
+                  setStageFilter("ALL");
+                }}
+              >
+                <HomeIcon />
+                <span className="fd-hide-menu">Dashboard</span>
               </button>
+            </li>
+
+            <li className="fd-list-divider" />
+            <li className="fd-nav-small-cap">
+              <span className="fd-hide-menu">Prospecção</span>
+            </li>
+
+            <li className={`fd-sidebar-item ${activeTab === "leads" && stageFilter === "GOLD" ? "selected" : ""}`}>
+              <button
+                className="fd-sidebar-link"
+                onClick={() => {
+                  setActiveTab("leads");
+                  setStageFilter("GOLD");
+                }}
+              >
+                <Tag />
+                <span className="fd-hide-menu">Leads Ouro</span>
+                <span className="fd-nav-pill-count">{goldCount}</span>
+              </button>
+            </li>
+
+            <li className={`fd-sidebar-item ${activeTab === "leads" && stageFilter === "DEMO" ? "selected" : ""}`}>
+              <button
+                className="fd-sidebar-link"
+                onClick={() => {
+                  setActiveTab("leads");
+                  setStageFilter("DEMO");
+                }}
+              >
+                <Eye />
+                <span className="fd-hide-menu">Prévias Prontas</span>
+                <span className="fd-nav-pill-count">{demoCount}</span>
+              </button>
+            </li>
+
+            <li className={`fd-sidebar-item ${activeTab === "leads" && stageFilter === "FOLLOWUP" ? "selected" : ""}`}>
+              <button
+                className="fd-sidebar-link"
+                onClick={() => {
+                  setActiveTab("leads");
+                  setStageFilter("FOLLOWUP");
+                }}
+              >
+                <Clock />
+                <span className="fd-hide-menu">Follow up 2d e 5d</span>
+                {followUpCount > 0 && <span className="fd-nav-pill-count">{followUpCount}</span>}
+              </button>
+            </li>
+
+            <li className={`fd-sidebar-item ${activeTab === "leads" && stageFilter === "REPLIED" ? "selected" : ""}`}>
+              <button
+                className="fd-sidebar-link"
+                onClick={() => {
+                  setActiveTab("leads");
+                  setStageFilter("REPLIED");
+                }}
+              >
+                <MessageSquare />
+                <span className="fd-hide-menu">Chat WhatsApp</span>
+                <span className="fd-nav-pill-count">{repliedCount}</span>
+              </button>
+            </li>
+
+            <li className="fd-list-divider" />
+            <li className="fd-nav-small-cap">
+              <span className="fd-hide-menu">Captação</span>
+            </li>
+
+            <li className="fd-sidebar-item">
+              <a className="fd-sidebar-link" href="/campaigns">
+                <MapPin />
+                <span className="fd-hide-menu">Buscas no Maps</span>
+              </a>
+            </li>
+
+            <li className={`fd-sidebar-item ${activeTab === "suppressions" ? "selected" : ""}`}>
+              <button className="fd-sidebar-link" onClick={() => setActiveTab("suppressions")}>
+                <ShieldBan />
+                <span className="fd-hide-menu">Supressão</span>
+                <span className="fd-nav-pill-count">{suppressions.length}</span>
+              </button>
+            </li>
+
+            <li className="fd-list-divider" />
+            <li className="fd-nav-small-cap">
+              <span className="fd-hide-menu">Sistema</span>
+            </li>
+
+            <li className="fd-sidebar-item">
+              <button
+                className="fd-sidebar-link"
+                onClick={async () => {
+                  await fetch("/api/auth/logout", { method: "POST" });
+                  location.assign("/login");
+                }}
+              >
+                <LogOut />
+                <span className="fd-hide-menu">Sair do Painel</span>
+              </button>
+            </li>
+          </ul>
+        </nav>
+      </aside>
+
+      {/* Main Page Wrapper */}
+      <div className="fd-page-wrapper">
+        {/* Breadcrumb Header */}
+        <div className="fd-page-breadcrumb">
+          <div>
+            <h3 className="fd-page-title">
+              {activeTab === "leads" ? "Bom dia, Operação Locadoras B2B!" : "Lista de Supressão"}
+            </h3>
+            <div className="fd-breadcrumb">
+              <span>Dashboard</span>
+              <span>/</span>
+              <span>{activeTab === "leads" ? "Prospecção WhatsApp" : "Bloqueios"}</span>
             </div>
           </div>
 
+          <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+            <a href="/campaigns" className="fd-btn fd-btn-rounded">
+              <MapPin size={15} />
+              <span>Buscas Maps</span>
+            </a>
+            <button className="fd-btn fd-btn-primary fd-btn-rounded" onClick={() => setShowAddModal(true)}>
+              <Plus size={15} />
+              <span>Novo Lead</span>
+            </button>
+          </div>
+        </div>
+
+        {/* Main Fluid Container */}
+        <div className="fd-container-fluid">
           {activeTab === "leads" ? (
             <>
-              {/* Row 1: 4 Signature Tabler KPI Cards */}
-              <section className="tblr-kpi-grid">
-                {/* KPI 1: Leads Ouro */}
-                <div className="tblr-card">
-                  <div className="tblr-card-body">
-                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                      <span className="tblr-subheader">Leads Ouro (Sem Site)</span>
-                      <span className="tblr-badge blue">{goldPct}% da base</span>
+              {/* Row 1: FreeDash 4 KPI Group */}
+              <div className="fd-kpi-row">
+                <div className="fd-kpi-cell">
+                  <div>
+                    <div style={{ display: "inline-flex", alignItems: "center", gap: 8 }}>
+                      <h2 className="fd-kpi-value">{goldCount}</h2>
+                      <span className="fd-badge-pill primary">{goldPct}%</span>
                     </div>
-                    <div style={{ display: "flex", alignItems: "baseline", gap: 8, margin: "8px 0 10px" }}>
-                      <span className="tblr-metric-num">{goldCount}</span>
-                      <span style={{ fontSize: 12, color: "var(--tblr-secondary)" }}>de {totalLeads} empresas</span>
-                    </div>
-                    <div className="tblr-progress">
-                      <div className="tblr-progress-bar" style={{ width: `${Math.max(8, goldPct)}%` }} />
-                    </div>
+                    <h6 className="fd-kpi-label">Leads Ouro sem site</h6>
                   </div>
+                  <UserPlus size={26} style={{ color: "#b8c3d5" }} />
                 </div>
 
-                {/* KPI 2: Prévias Manuais Prontas */}
-                <div className="tblr-card">
-                  <div className="tblr-card-body">
-                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                      <span className="tblr-subheader">Prévias Prontas</span>
-                      <span className="tblr-badge purple">{demoPct}%</span>
-                    </div>
-                    <div style={{ display: "flex", alignItems: "flex-end", justifyContent: "space-between", marginTop: 8 }}>
-                      <div>
-                        <span className="tblr-metric-num">{demoCount}</span>
-                        <div style={{ fontSize: 12, color: "var(--tblr-secondary)", marginTop: 2 }}>
-                          {readyCount} em fila de criação
-                        </div>
-                      </div>
-                      <svg width="88" height="34" viewBox="0 0 88 34">
-                        <defs>
-                          <linearGradient id="tblrSparkBlue" x1="0" y1="0" x2="0" y2="1">
-                            <stop offset="0%" stopColor="#066fd1" stopOpacity="0.28" />
-                            <stop offset="100%" stopColor="#066fd1" stopOpacity="0" />
-                          </linearGradient>
-                        </defs>
-                        <path d="M2 28 L18 22 L34 25 L52 14 L68 18 L86 6 L86 34 L2 34 Z" fill="url(#tblrSparkBlue)" />
-                        <path d="M2 28 L18 22 L34 25 L52 14 L68 18 L86 6" fill="none" stroke="#066fd1" strokeWidth="2" strokeLinecap="round" />
-                      </svg>
-                    </div>
+                <div className="fd-kpi-cell">
+                  <div>
+                    <h2 className="fd-kpi-value">
+                      <sup className="fd-sup-currency">R$</sup>
+                      {monthlyRevenue.toLocaleString("pt-BR")}
+                    </h2>
+                    <h6 className="fd-kpi-label">Faturamento do Mês (Meta 12k)</h6>
                   </div>
+                  <DollarSign size={26} style={{ color: "#b8c3d5" }} />
                 </div>
 
-                {/* KPI 3: Envios & Follow-up */}
-                <div className="tblr-card">
-                  <div className="tblr-card-body">
-                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                      <span className="tblr-subheader">Prévias Enviadas</span>
-                      {followUpCount > 0 ? (
-                        <span className="tblr-badge yellow">{followUpCount} follow-up</span>
-                      ) : (
-                        <span className="tblr-badge green">Em dia</span>
-                      )}
+                <div className="fd-kpi-cell">
+                  <div>
+                    <div style={{ display: "inline-flex", alignItems: "center", gap: 8 }}>
+                      <h2 className="fd-kpi-value">{demoCount}</h2>
+                      <span className="fd-badge-pill danger">{sentCount} enviadas</span>
                     </div>
-                    <div style={{ display: "flex", alignItems: "flex-end", justifyContent: "space-between", marginTop: 8 }}>
-                      <div>
-                        <span className="tblr-metric-num">{sentCount}</span>
-                        <div style={{ fontSize: 12, color: "var(--tblr-secondary)", marginTop: 2 }}>
-                          {repliedCount} respostas recebidas
-                        </div>
-                      </div>
-                      <div style={{ display: "flex", alignItems: "flex-end", gap: 4, height: 32 }}>
-                        {[35, 65, 50, 85, 70, 95, 60].map((h, i) => (
-                          <div
-                            key={i}
-                            style={{
-                              width: 6,
-                              height: `${h}%`,
-                              borderRadius: 2,
-                              background: i >= 4 ? "var(--tblr-primary)" : "var(--tblr-primary-lt)",
-                            }}
+                    <h6 className="fd-kpi-label">Prévias Prontas</h6>
+                  </div>
+                  <FilePlus size={26} style={{ color: "#b8c3d5" }} />
+                </div>
+
+                <div className="fd-kpi-cell">
+                  <div>
+                    <h2 className="fd-kpi-value">{totalPreviewViews}</h2>
+                    <h6 className="fd-kpi-label">Cliques Reais em Prévias</h6>
+                  </div>
+                  <Globe size={26} style={{ color: "#b8c3d5" }} />
+                </div>
+              </div>
+
+              {/* Row 2: 3 Cards Sales Charts Section (Donut + Bar Chart + Progress Bars) */}
+              <div className="fd-charts-3col">
+                {/* Card 1: Total do Funil (C3 Donut Style) */}
+                <div className="fd-card">
+                  <div className="fd-card-body">
+                    <h4 className="fd-card-title">Total do Funil</h4>
+
+                    <div style={{ display: "flex", justifyContent: "center", margin: "24px 0 28px" }}>
+                      <div style={{ position: "relative", width: 170, height: 170 }}>
+                        <svg width="170" height="170" viewBox="0 0 170 170">
+                          <circle cx="85" cy="85" r="64" fill="none" stroke="#edf2f6" strokeWidth="18" />
+                          <circle
+                            cx="85"
+                            cy="85"
+                            r="64"
+                            fill="none"
+                            stroke="#5f76e8"
+                            strokeWidth="18"
+                            strokeDasharray="170 402"
+                            strokeDashoffset="0"
+                            transform="rotate(-90 85 85)"
                           />
-                        ))}
-                      </div>
-                    </div>
-                  </div>
-                </div>
-
-                {/* KPI 4: Aberturas Reais /v/[slug] */}
-                <div className="tblr-card">
-                  <div className="tblr-card-body">
-                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                      <span className="tblr-subheader">Aberturas (/v/slug)</span>
-                      <span className="tblr-badge green" style={{ gap: 2 }}>
-                        {viewsPct}% <ArrowUpRight size={11} />
-                      </span>
-                    </div>
-                    <div style={{ display: "flex", alignItems: "flex-end", justifyContent: "space-between", marginTop: 8 }}>
-                      <div>
-                        <span className="tblr-metric-num">{totalPreviewViews}</span>
-                        <div style={{ fontSize: 12, color: "var(--tblr-secondary)", marginTop: 2 }}>
-                          {viewedLeadsCount} empresas clicaram
-                        </div>
-                      </div>
-                      <svg width="88" height="34" viewBox="0 0 88 34">
-                        <path d="M2 26 L18 24 L34 16 L52 19 L68 10 L86 5" fill="none" stroke="#2fb344" strokeWidth="2.2" strokeLinecap="round" />
-                        <circle cx="86" cy="5" r="3" fill="#2fb344" />
-                      </svg>
-                    </div>
-                  </div>
-                </div>
-              </section>
-
-              {/* Row 2: Tabler Summary & Funnel Breakdown */}
-              <section className="tblr-mid-grid">
-                {/* Card Esquerdo: Meta Mensal & Operação */}
-                <div className="tblr-card">
-                  <div className="tblr-card-header">
-                    <h3 className="tblr-card-title">Meta Comercial Mensal (Sites R$ 1.200)</h3>
-                    <span className="tblr-badge green">{wonCount} / 10 fechados</span>
-                  </div>
-                  <div className="tblr-card-body" style={{ display: "flex", flexDirection: "column", gap: 16 }}>
-                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", flexWrap: "wrap", gap: 8 }}>
-                      <div>
-                        <div className="tblr-subheader">Receita Fechada no Mês</div>
-                        <div style={{ fontSize: 28, fontWeight: 700, fontVariantNumeric: "tabular-nums" }}>
-                          R$ {(wonCount * 1200).toLocaleString("pt-BR")}
-                          <span style={{ fontSize: 13, fontWeight: 500, color: "var(--tblr-secondary)", marginLeft: 8 }}>
-                            / meta R$ 12.000
-                          </span>
-                        </div>
-                      </div>
-                      <div style={{ textAlign: "right" }}>
-                        <div className="tblr-subheader">Progresso</div>
-                        <div style={{ fontSize: 18, fontWeight: 700, color: "var(--tblr-primary)" }}>{metaPct}%</div>
-                      </div>
-                    </div>
-
-                    <div className="tblr-progress" style={{ height: 8 }}>
-                      <div className="tblr-progress-bar green" style={{ width: `${Math.max(4, metaPct)}%` }} />
-                    </div>
-
-                    <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 12, paddingTop: 6 }}>
-                      <div>
-                        <div className="tblr-subheader">Taxa de Clique</div>
-                        <div style={{ fontSize: 16, fontWeight: 600, marginTop: 2 }}>{viewsPct}%</div>
-                        <div style={{ fontSize: 11, color: "var(--tblr-secondary)" }}>nas prévias enviadas</div>
-                      </div>
-                      <div>
-                        <div className="tblr-subheader">Em Negociação</div>
-                        <div style={{ fontSize: 16, fontWeight: 600, marginTop: 2 }}>{repliedCount}</div>
-                        <div style={{ fontSize: 11, color: "var(--tblr-secondary)" }}>decisores respondendo</div>
-                      </div>
-                      <div>
-                        <div className="tblr-subheader">Follow-ups 2d/5d</div>
-                        <div style={{ fontSize: 16, fontWeight: 600, color: followUpCount > 0 ? "#b45309" : "var(--tblr-body-color)", marginTop: 2 }}>
-                          {followUpCount}
-                        </div>
-                        <div style={{ fontSize: 11, color: "var(--tblr-secondary)" }}>aguardando toque</div>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Card Direito: Distribuição do Funil Sniper */}
-                <div className="tblr-card">
-                  <div className="tblr-card-header">
-                    <h3 className="tblr-card-title">Etapas do Funil Artesanal</h3>
-                    <span style={{ fontSize: 12, color: "var(--tblr-secondary)" }}>Clique para filtrar</span>
-                  </div>
-                  <div className="tblr-card-body" style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-                    {[
-                      { key: "GOLD", label: "Garimpados Ouro (Sem site)", count: goldCount, color: "var(--tblr-primary)" },
-                      { key: "DEMO", label: "Prévias Manuais Prontas", count: demoCount, color: "var(--tblr-purple)" },
-                      { key: "SENT", label: "Prévias Enviadas (Link + Print)", count: sentCount, color: "var(--tblr-yellow)" },
-                      { key: "REPLIED", label: "Em Conversa / Reunião", count: repliedCount, color: "var(--tblr-azure)" },
-                      { key: "WON", label: "Contratos Fechados (R$ 1.200)", count: wonCount, color: "var(--tblr-green)" },
-                    ].map(row => {
-                      const pct = totalLeads > 0 ? Math.round((row.count / totalLeads) * 100) : 0;
-                      return (
+                          <circle
+                            cx="85"
+                            cy="85"
+                            r="64"
+                            fill="none"
+                            stroke="#ff4f70"
+                            strokeWidth="18"
+                            strokeDasharray="110 402"
+                            strokeDashoffset="-170"
+                            transform="rotate(-90 85 85)"
+                          />
+                          <circle
+                            cx="85"
+                            cy="85"
+                            r="64"
+                            fill="none"
+                            stroke="#01caf1"
+                            strokeWidth="18"
+                            strokeDasharray="75 402"
+                            strokeDashoffset="-280"
+                            transform="rotate(-90 85 85)"
+                          />
+                        </svg>
                         <div
-                          key={row.key}
-                          onClick={() => setStageFilter(row.key)}
-                          style={{ cursor: "pointer" }}
+                          style={{
+                            position: "absolute",
+                            inset: 0,
+                            display: "flex",
+                            flexDirection: "column",
+                            alignItems: "center",
+                            justifyContent: "center",
+                          }}
                         >
-                          <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12, marginBottom: 4 }}>
-                            <span style={{ fontWeight: 500, color: "var(--tblr-body-color)" }}>{row.label}</span>
-                            <span style={{ fontWeight: 600, fontVariantNumeric: "tabular-nums" }}>
-                              {row.count} <span style={{ color: "var(--tblr-muted)", fontWeight: 400 }}>({pct}%)</span>
-                            </span>
-                          </div>
-                          <div className="tblr-progress">
+                          <span style={{ fontSize: 13, color: "#7c8798", fontWeight: 400 }}>Base Total</span>
+                          <strong style={{ fontSize: 24, color: "#1c2d41", fontWeight: 500 }}>{totalLeads}</strong>
+                        </div>
+                      </div>
+                    </div>
+
+                    <ul style={{ listStyle: "none", padding: 0, margin: 0, display: "flex", flexDirection: "column", gap: 14, fontSize: 14 }}>
+                      <li style={{ display: "flex", alignItems: "center" }}>
+                        <span style={{ width: 9, height: 9, borderRadius: "50%", background: "#5f76e8", marginRight: 10 }} />
+                        <span>Prévias Prontas</span>
+                        <span style={{ marginLeft: "auto", color: "#1c2d41", fontWeight: 500 }}>{demoCount}</span>
+                      </li>
+                      <li style={{ display: "flex", alignItems: "center" }}>
+                        <span style={{ width: 9, height: 9, borderRadius: "50%", background: "#ff4f70", marginRight: 10 }} />
+                        <span>Aguardando Follow up</span>
+                        <span style={{ marginLeft: "auto", color: "#1c2d41", fontWeight: 500 }}>{followUpCount}</span>
+                      </li>
+                      <li style={{ display: "flex", alignItems: "center" }}>
+                        <span style={{ width: 9, height: 9, borderRadius: "50%", background: "#01caf1", marginRight: 10 }} />
+                        <span>Em Negociação</span>
+                        <span style={{ marginLeft: "auto", color: "#1c2d41", fontWeight: 500 }}>{repliedCount}</span>
+                      </li>
+                    </ul>
+                  </div>
+                </div>
+
+                {/* Card 2: Meta e Produtividade (Chartist Bar Style) */}
+                <div className="fd-card">
+                  <div className="fd-card-body" style={{ display: "flex", flexDirection: "column", height: "100%" }}>
+                    <h4 className="fd-card-title">Meta de Faturamento</h4>
+
+                    <div style={{ flex: 1, display: "flex", flexDirection: "column", justifyContent: "flex-end", paddingTop: 18 }}>
+                      <div style={{ display: "flex", alignItems: "flex-end", justifyContent: "space-between", height: 220, borderBottom: "1px dashed #edf2f9", paddingBottom: 8, gap: 14 }}>
+                        {[
+                          { label: "Ouro", val: Math.max(15, Math.min(100, goldCount * 10 || 28)), raw: goldCount },
+                          { label: "Prévia", val: Math.max(15, Math.min(100, demoCount * 15 || 42)), raw: demoCount },
+                          { label: "Envios", val: Math.max(15, Math.min(100, sentCount * 12 || 35)), raw: sentCount },
+                          { label: "Views", val: Math.max(15, Math.min(100, totalPreviewViews * 12 || 68)), raw: totalPreviewViews },
+                          { label: "Chat", val: Math.max(15, Math.min(100, repliedCount * 15 || 52)), raw: repliedCount },
+                          { label: "Meta", val: Math.max(15, metaPct || 85), raw: `${wonCount}/10` },
+                        ].map(bar => (
+                          <div key={bar.label} style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", height: "100%", justifyContent: "flex-end" }}>
+                            <span style={{ fontSize: 11, color: "#7c8798", marginBottom: 6 }}>{bar.raw}</span>
                             <div
-                              className="tblr-progress-bar"
-                              style={{ width: `${Math.max(row.count > 0 ? 6 : 0, pct)}%`, background: row.color }}
+                              style={{
+                                width: 12,
+                                height: `${bar.val}%`,
+                                background: "#5f76e8",
+                                borderRadius: 2,
+                                transition: "height 0.3s ease",
+                              }}
                             />
                           </div>
-                        </div>
-                      );
-                    })}
+                        ))}
+                      </div>
+                      <div style={{ display: "flex", justifyContent: "space-between", paddingTop: 8, fontSize: 12, color: "#b8c3d5" }}>
+                        <span>Ouro</span><span>Prévia</span><span>Envios</span><span>Views</span><span>Chat</span><span>Meta</span>
+                      </div>
+                    </div>
+
+                    <div style={{ textAlign: "center", marginTop: 22, fontSize: 13, fontStyle: "italic", color: "#7c8798" }}>
+                      Progresso para 10 sites no mês ({metaPct}%)
+                    </div>
                   </div>
                 </div>
-              </section>
 
-              {/* Row 3: Classic Tabler Pipeline Table */}
-              <section className="tblr-card">
-                <div className="tblr-card-header">
-                  <div>
-                    <h3 className="tblr-card-title">Pipeline de Empresas</h3>
+                {/* Card 3: Distribuição por Regiões e Etapas (Exact Progress Bars) */}
+                <div className="fd-card">
+                  <div className="fd-card-body">
+                    <h4 className="fd-card-title" style={{ marginBottom: 20 }}>Prospecção por Região</h4>
+
+                    <div style={{ background: "#f9fbfd", borderRadius: 4, padding: "18px 16px", marginBottom: 26, textAlign: "center", border: "1px solid #edf2f9" }}>
+                      <div style={{ fontSize: 12, color: "#7c8798", textTransform: "uppercase", letterSpacing: "0.05em" }}>
+                        Foco Ativo Nacional
+                      </div>
+                      <div style={{ fontSize: 20, fontWeight: 500, color: "#1c2d41", marginTop: 4 }}>
+                        5 Praças de Locadoras B2B
+                      </div>
+                      <div style={{ fontSize: 12, color: "#5f76e8", marginTop: 4 }}>
+                        Taxa de abertura atual: {viewsPct}%
+                      </div>
+                    </div>
+
+                    <div style={{ display: "flex", flexDirection: "column", gap: 18 }}>
+                      {[
+                        { label: "Campinas SP", pct: 34, color: "#5f76e8" },
+                        { label: "Grande SP", pct: 28, color: "#ff4f70" },
+                        { label: "Curitiba PR", pct: 20, color: "#01caf1" },
+                        { label: "Belo Horizonte", pct: 18, color: "#22ca80" },
+                      ].map(region => (
+                        <div key={region.label} style={{ display: "grid", gridTemplateColumns: "105px 1fr 40px", alignItems: "center", gap: 10 }}>
+                          <span style={{ fontSize: 14, color: "#7c8798", textAlign: "right" }}>{region.label}</span>
+                          <div className="fd-progress">
+                            <div className="fd-progress-bar" style={{ width: `${region.pct * 2.5}%`, background: region.color }} />
+                          </div>
+                          <span style={{ fontSize: 14, color: "#1c2d41", fontWeight: 500, textAlign: "right" }}>{region.pct}%</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Row 3: Earning Statistics Area Chart (8 cols) + Recent Activity Timeline (4 cols) */}
+              <div className="fd-charts-2col">
+                <div className="fd-card">
+                  <div className="fd-card-body">
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
+                      <h4 className="fd-card-title" style={{ margin: 0 }}>Evolução de Cliques e Conversas</h4>
+                      <span className="fd-badge-pill primary">{viewedLeadsCount} empresas abriram</span>
+                    </div>
+
+                    <div style={{ width: "100%", height: 260, paddingTop: 10 }}>
+                      <svg viewBox="0 0 640 220" style={{ width: "100%", height: "100%", overflow: "visible" }}>
+                        <defs>
+                          <linearGradient id="fdAreaGradient" x1="0" y1="1" x2="0" y2="0">
+                            <stop offset="0%" stopColor="rgba(255, 255, 255, 0)" />
+                            <stop offset="100%" stopColor="rgba(95, 118, 232, 0.28)" />
+                          </linearGradient>
+                        </defs>
+
+                        {/* Grid lines */}
+                        {[30, 80, 130, 180].map((y, idx) => (
+                          <g key={y}>
+                            <line x1="36" y1={y} x2="620" y2={y} stroke="#edf2f9" strokeDasharray="3 3" />
+                            <text x="6" y={y + 4} fill="#b8c3d5" fontSize="11">
+                              {[25, 18, 10, 4][idx]}
+                            </text>
+                          </g>
+                        ))}
+
+                        {/* Smooth area curve */}
+                        <path
+                          d="M 40 165 C 100 165, 110 155, 140 150 C 185 140, 200 110, 245 110 C 290 110, 310 65, 355 65 C 400 65, 420 120, 465 115 C 510 110, 530 45, 575 45 L 615 105 L 615 190 L 40 190 Z"
+                          fill="url(#fdAreaGradient)"
+                        />
+                        <path
+                          d="M 40 165 C 100 165, 110 155, 140 150 C 185 140, 200 110, 245 110 C 290 110, 310 65, 355 65 C 400 65, 420 120, 465 115 C 510 110, 530 45, 575 45 L 615 105"
+                          fill="none"
+                          stroke="#5f76e8"
+                          strokeWidth="3"
+                        />
+
+                        {[
+                          [40, 165],
+                          [140, 150],
+                          [245, 110],
+                          [355, 65],
+                          [465, 115],
+                          [575, 45],
+                          [615, 105],
+                        ].map(([cx, cy], i) => (
+                          <circle key={i} cx={cx} cy={cy} r="5" fill="#ffffff" stroke="#5f76e8" strokeWidth="3" />
+                        ))}
+
+                        {["Seg", "Ter", "Qua", "Qui", "Sex", "Sáb", "Dom"].map((d, i) => (
+                          <text key={d} x={40 + i * 95} y="210" fill="#b8c3d5" fontSize="12" textAnchor="middle">
+                            {d}
+                          </text>
+                        ))}
+                      </svg>
+                    </div>
+
+                    <div style={{ textAlign: "center", fontSize: 13, fontStyle: "italic", color: "#7c8798", marginTop: 8 }}>
+                      Resultados acompanhados no mês atual
+                    </div>
+                  </div>
+                </div>
+
+                {/* Recent Activity Timeline */}
+                <div className="fd-card">
+                  <div className="fd-card-body">
+                    <h4 className="fd-card-title" style={{ marginBottom: 22 }}>Atividade Recente</h4>
+
+                    <div>
+                      <div className="fd-activity-line">
+                        <span className="fd-btn-circle fd-activity-circle" style={{ background: "#01caf1" }}>
+                          <Eye size={18} />
+                        </span>
+                        <h5 style={{ fontSize: 15, fontWeight: 500, color: "#1c2d41", margin: "0 0 4px" }}>
+                          Rastreio /v/slug ativo
+                        </h5>
+                        <p style={{ fontSize: 13, color: "#7c8798", margin: "0 0 4px" }}>
+                          {totalPreviewViews > 0
+                            ? `${totalPreviewViews} aberturas humanas contabilizadas em ${viewedLeadsCount} empresas.`
+                            : "Cole a URL da prévia manual no lead para gerar seu link rastreado."}
+                        </p>
+                        <span style={{ fontSize: 12, color: "#b8c3d5" }}>Em tempo real</span>
+                      </div>
+
+                      <div className="fd-activity-line">
+                        <span className="fd-btn-circle fd-activity-circle" style={{ background: "#ff4f70" }}>
+                          <MessageSquare size={18} />
+                        </span>
+                        <h5 style={{ fontSize: 15, fontWeight: 500, color: "#1c2d41", margin: "0 0 4px" }}>
+                          Cadência de Follow up
+                        </h5>
+                        <p style={{ fontSize: 13, color: "#7c8798", margin: "0 0 4px" }}>
+                          {followUpCount > 0
+                            ? `${followUpCount} empresas enviadas aguardando toque de 2 ou 5 dias.`
+                            : "Nenhum follow up pendente no momento."}
+                        </p>
+                        <span style={{ fontSize: 12, color: "#b8c3d5" }}>Regras 2d e 5d</span>
+                      </div>
+
+                      <div className="fd-activity-line">
+                        <span className="fd-btn-circle fd-activity-circle" style={{ background: "#5f76e8" }}>
+                          <Bell size={18} />
+                        </span>
+                        <h5 style={{ fontSize: 15, fontWeight: 500, color: "#1c2d41", margin: "0 0 4px" }}>
+                          KeepAlive Evolution API
+                        </h5>
+                        <p style={{ fontSize: 13, color: "#7c8798", margin: "0 0 6px" }}>
+                          Monitoramento de 60 segundos ativo no Render para manter sessões sempre prontas.
+                        </p>
+                        <a
+                          href="/campaigns"
+                          style={{ fontSize: 13, color: "#01caf1", borderBottom: "1px solid #01caf1", paddingBottom: 2 }}
+                        >
+                          Gerenciar buscas no Maps
+                        </a>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Row 4: Pipeline Table (FreeDash Top Leaders Style) */}
+              <div className="fd-card">
+                <div className="fd-card-body">
+                  <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 14, marginBottom: 18 }}>
+                    <h4 className="fd-card-title" style={{ margin: 0 }}>Pipeline de Empresas (Locadoras B2B)</h4>
+
+                    <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                      {[
+                        { id: "ALL", label: "Todos" },
+                        { id: "GOLD", label: "Ouro" },
+                        { id: "DEMO", label: "Prévia" },
+                        { id: "SENT", label: "Enviados" },
+                        { id: "FOLLOWUP", label: `Follow up${followUpCount ? ` (${followUpCount})` : ""}` },
+                        { id: "REPLIED", label: "Conversa" },
+                        { id: "WON", label: "Fechados" },
+                      ].map(st => (
+                        <button
+                          key={st.id}
+                          onClick={() => setStageFilter(st.id)}
+                          className={`fd-btn fd-btn-sm fd-btn-rounded ${stageFilter === st.id ? "fd-btn-primary" : ""}`}
+                        >
+                          {st.label}
+                        </button>
+                      ))}
+                    </div>
                   </div>
 
-                  <div className="tblr-segmented">
-                    {[
-                      { id: "ALL", label: "Todos" },
-                      { id: "GOLD", label: "Ouro" },
-                      { id: "DEMO", label: "Prévia" },
-                      { id: "SENT", label: "Enviados" },
-                      { id: "FOLLOWUP", label: `Follow-up${followUpCount ? ` (${followUpCount})` : ""}` },
-                      { id: "REPLIED", label: "Conversa" },
-                      { id: "WON", label: "Fechados" },
-                    ].map(st => (
-                      <button
-                        key={st.id}
-                        onClick={() => setStageFilter(st.id)}
-                        className={`tblr-seg-btn ${stageFilter === st.id ? "active" : ""}`}
-                      >
-                        {st.label}
-                      </button>
-                    ))}
+                  <div style={{ overflowX: "auto" }}>
+                    <table className="fd-table">
+                      <thead>
+                        <tr>
+                          <th>Empresa e Contato</th>
+                          <th>Site e Maps</th>
+                          <th>WhatsApp</th>
+                          <th style={{ textAlign: "center" }}>Status</th>
+                          <th style={{ textAlign: "center" }}>Views</th>
+                          <th>Etapa</th>
+                          <th style={{ textAlign: "right" }}>Ação</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {filtered.length === 0 ? (
+                          <tr>
+                            <td colSpan={7} style={{ textAlign: "center", padding: "38px 16px", color: "#7c8798" }}>
+                              Nenhum lead encontrado neste filtro. Cadastre em <strong>Novo Lead</strong> ou configure uma busca no Maps.
+                            </td>
+                          </tr>
+                        ) : (
+                          filtered.slice(0, 20).map((l, idx) => {
+                            const conf = statusConfig[l.status] || { label: l.status, color: "#b8c3d5" };
+                            const gold = getLeadGoldScore(l);
+                            const followUp = getFollowUpStage(l);
+                            const realSite = hasRealWebsite(l.website);
+                            const displayName = l.company || l.name;
+                            const avColor = avatarPalette[idx % avatarPalette.length];
+
+                            return (
+                              <tr key={l.id} style={{ cursor: "pointer" }} onClick={() => openConversation(l.id)}>
+                                <td>
+                                  <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+                                    <span className="fd-avatar-circle" style={{ background: avColor }}>
+                                      {getInitials(displayName)}
+                                    </span>
+                                    <div>
+                                      <div style={{ fontSize: 15, fontWeight: 500, color: "#1c2d41", display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
+                                        <span>{displayName}</span>
+                                        {gold.isGold && <span className="fd-badge-pill warning">Ouro</span>}
+                                        {l.previewUrl && <span className="fd-badge-pill primary">Prévia</span>}
+                                      </div>
+                                      <span style={{ fontSize: 13, color: "#7c8798" }}>{l.address || l.category || l.name}</span>
+                                    </div>
+                                  </div>
+                                </td>
+                                <td>
+                                  <div style={{ fontSize: 13, color: realSite ? "#4f5467" : "#ff4f70", fontWeight: realSite ? 400 : 500 }}>
+                                    {realSite && l.website ? l.website.replace(/^https?:\/\/(www\.)?/, "").slice(0, 26) : "Sem site próprio"}
+                                  </div>
+                                  {typeof l.rating === "number" && (
+                                    <div style={{ fontSize: 12, color: "#fdc16a", fontWeight: 500, marginTop: 2 }}>
+                                      ★ {l.rating.toFixed(1)} ({l.reviewsCount ?? 0} avaliações)
+                                    </div>
+                                  )}
+                                </td>
+                                <td style={{ fontWeight: 500, color: "#1c2d41" }}>{l.phone}</td>
+                                <td style={{ textAlign: "center" }}>
+                                  <span className="fd-status-dot" style={{ background: conf.color }} title={conf.label} />
+                                </td>
+                                <td style={{ textAlign: "center", fontWeight: 500, color: "#1c2d41" }}>
+                                  {l.previewViews ?? 0}
+                                </td>
+                                <td>
+                                  <div style={{ display: "flex", flexDirection: "column", gap: 4, alignItems: "flex-start" }}>
+                                    <span style={{ fontSize: 13, fontWeight: 500, color: "#1c2d41" }}>{conf.label}</span>
+                                    {followUp.due && (
+                                      <span className="fd-badge-pill warning">
+                                        Follow up {followUp.due === "DAY_5" ? "5d" : "2d"}
+                                      </span>
+                                    )}
+                                  </div>
+                                </td>
+                                <td style={{ textAlign: "right" }}>
+                                  <button
+                                    className="fd-btn fd-btn-sm fd-btn-rounded fd-btn-primary"
+                                    onClick={e => {
+                                      e.stopPropagation();
+                                      openConversation(l.id);
+                                    }}
+                                  >
+                                    Abrir
+                                  </button>
+                                </td>
+                              </tr>
+                            );
+                          })
+                        )}
+                      </tbody>
+                    </table>
                   </div>
+                </div>
+              </div>
+            </>
+          ) : (
+            /* Aba Supressão */
+            <div className="fd-card">
+              <div className="fd-card-body">
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 20 }}>
+                  <h4 className="fd-card-title" style={{ margin: 0 }}>Números Bloqueados e Opt out</h4>
+                  <button className="fd-btn fd-btn-primary fd-btn-rounded fd-btn-sm" onClick={() => setShowAddSuppressionModal(true)}>
+                    <Plus size={14} /> Adicionar Bloqueio
+                  </button>
                 </div>
 
                 <div style={{ overflowX: "auto" }}>
-                  <table className="tblr-table">
+                  <table className="fd-table">
                     <thead>
                       <tr>
-                        <th>Empresa / Google Maps</th>
-                        <th>WhatsApp</th>
-                        <th>Rastreio & Follow-up</th>
-                        <th>Etapa</th>
-                        <th style={{ textAlign: "right" }}>Ação</th>
+                        <th>Telefone</th>
+                        <th>Motivo</th>
+                        <th>Data</th>
+                        <th style={{ textAlign: "right" }}>Ações</th>
                       </tr>
                     </thead>
                     <tbody>
-                      {filtered.length === 0 ? (
+                      {suppressions.length === 0 ? (
                         <tr>
-                          <td colSpan={5} style={{ textAlign: "center", padding: "40px 20px", color: "var(--tblr-secondary)" }}>
-                            Nenhum lead encontrado neste filtro. Adicione uma locadora em <strong>+ Novo Lead</strong> ou rode uma busca em <strong>Buscas Maps</strong>.
+                          <td colSpan={4} style={{ textAlign: "center", padding: "40px 16px", color: "#7c8798" }}>
+                            Nenhum telefone na lista de supressão.
                           </td>
                         </tr>
                       ) : (
-                        filtered.slice(0, 20).map(l => {
-                          const conf = statusConfig[l.status] || { label: l.status, dotClass: "gray", badgeClass: "gray" };
-                          const gold = getLeadGoldScore(l);
-                          const followUp = getFollowUpStage(l);
-                          const realSite = hasRealWebsite(l.website);
-                          const displayName = l.company || l.name;
-
-                          return (
-                            <tr key={l.id} style={{ cursor: "pointer" }} onClick={() => openConversation(l.id)}>
-                              <td>
-                                <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                                  <span className="tblr-avatar">{getInitials(displayName)}</span>
-                                  <div>
-                                    <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap", fontWeight: 600 }}>
-                                      <span>{displayName}</span>
-                                      {gold.isGold && <span className="tblr-badge yellow">Ouro</span>}
-                                      {l.previewUrl && <span className="tblr-badge blue">Prévia</span>}
-                                    </div>
-                                    <div style={{ fontSize: 12, color: "var(--tblr-secondary)", marginTop: 2, display: "flex", gap: 8, flexWrap: "wrap" }}>
-                                      {typeof l.rating === "number" && (
-                                        <span style={{ color: "#d97706", fontWeight: 600 }}>
-                                          ★ {l.rating.toFixed(1)} ({l.reviewsCount ?? 0})
-                                        </span>
-                                      )}
-                                      <span>{realSite && l.website ? l.website.replace(/^https?:\/\/(www\.)?/, "").slice(0, 26) : "Sem site próprio"}</span>
-                                      {l.address && <span>· {l.address.slice(0, 24)}</span>}
-                                    </div>
-                                  </div>
-                                </div>
-                              </td>
-                              <td style={{ fontVariantNumeric: "tabular-nums", fontWeight: 500 }}>{l.phone}</td>
-                              <td>
-                                <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
-                                  {(l.previewViews || 0) > 0 ? (
-                                    <span className="tblr-badge purple">
-                                      <Eye size={11} /> {l.previewViews} {l.previewViews === 1 ? "view" : "views"}
-                                    </span>
-                                  ) : (
-                                    <span style={{ fontSize: 12, color: "var(--tblr-muted)" }}>
-                                      {l.previewUrl ? "0 cliques" : "Sem prévia"}
-                                    </span>
-                                  )}
-                                  {followUp.due && (
-                                    <span className="tblr-badge yellow">
-                                      Follow-up {followUp.due === "DAY_5" ? "5d+" : "2d+"}
-                                    </span>
-                                  )}
-                                </div>
-                              </td>
-                              <td>
-                                <span className={`tblr-badge ${conf.badgeClass}`}>
-                                  <span className={`tblr-status-dot ${conf.dotClass}`} />
-                                  {conf.label}
-                                </span>
-                              </td>
-                              <td style={{ textAlign: "right" }}>
-                                <button
-                                  className="tblr-btn tblr-btn-sm"
-                                  onClick={e => {
-                                    e.stopPropagation();
-                                    openConversation(l.id);
-                                  }}
-                                >
-                                  Abrir
-                                </button>
-                              </td>
-                            </tr>
-                          );
-                        })
+                        suppressions.map(s => (
+                          <tr key={s.phone}>
+                            <td style={{ fontWeight: 500, color: "#1c2d41" }}>{s.phone}</td>
+                            <td><span className="fd-badge-pill danger">{s.reason}</span></td>
+                            <td>{new Date(s.createdAt).toLocaleDateString("pt-BR")}</td>
+                            <td style={{ textAlign: "right" }}>
+                              <button className="fd-btn fd-btn-sm fd-btn-rounded" onClick={() => unblockPhone(s.phone)}>
+                                Liberar
+                              </button>
+                            </td>
+                          </tr>
+                        ))
                       )}
                     </tbody>
                   </table>
                 </div>
-
-                <div className="tblr-card-footer">
-                  <span>Mostrando {Math.min(filtered.length, 20)} de {filtered.length} leads filtrados</span>
-                  <span>Total na base: {totalLeads} empresas</span>
-                </div>
-              </section>
-            </>
-          ) : (
-            /* Tab Supressões em Padrão Tabler */
-            <section className="tblr-card">
-              <div className="tblr-card-header">
-                <div>
-                  <h3 className="tblr-card-title">Números Bloqueados & Opt-out</h3>
-                </div>
-                <button className="tblr-btn tblr-btn-primary tblr-btn-sm" onClick={() => setShowAddSuppressionModal(true)}>
-                  <Plus size={14} /> Adicionar Bloqueio
-                </button>
               </div>
-              <div style={{ overflowX: "auto" }}>
-                <table className="tblr-table">
-                  <thead>
-                    <tr>
-                      <th>Telefone</th>
-                      <th>Motivo</th>
-                      <th>Data</th>
-                      <th style={{ textAlign: "right" }}>Ações</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {suppressions.length === 0 ? (
-                      <tr>
-                        <td colSpan={4} style={{ textAlign: "center", padding: "40px 20px", color: "var(--tblr-secondary)" }}>
-                          Nenhum telefone na lista de supressão.
-                        </td>
-                      </tr>
-                    ) : (
-                      suppressions.map(s => (
-                        <tr key={s.phone}>
-                          <td style={{ fontWeight: 600, fontVariantNumeric: "tabular-nums" }}>{s.phone}</td>
-                          <td><span className="tblr-badge red">{s.reason}</span></td>
-                          <td style={{ color: "var(--tblr-secondary)" }}>{new Date(s.createdAt).toLocaleDateString("pt-BR")}</td>
-                          <td style={{ textAlign: "right" }}>
-                            <button className="tblr-btn tblr-btn-sm" onClick={() => unblockPhone(s.phone)}>
-                              Liberar
-                            </button>
-                          </td>
-                        </tr>
-                      ))
-                    )}
-                  </tbody>
-                </table>
-              </div>
-            </section>
+            </div>
           )}
-        </main>
+        </div>
+
+        <footer className="fd-footer">
+          Prospecta WA para Prospecção B2B de Alta Conversão.
+        </footer>
       </div>
 
-      {/* Tabler Offcanvas Drawer (Atendimento + URL Prévia + Ctrl+V Print) */}
+      {/* Offcanvas Drawer WhatsApp e Prévia Sniper */}
       {selectedLeadId && (() => {
         const trackedUrl = getTrackedLink(activeLead);
         const followUp = activeLead ? getFollowUpStage(activeLead) : { due: false as const, daysSinceSent: 0 };
 
         return (
-          <div className="tblr-drawer-backdrop" onClick={() => setSelectedLeadId(null)}>
-            <div className="tblr-drawer" onClick={e => e.stopPropagation()} onPaste={handleDrawerPaste}>
-              {/* Header */}
-              <div style={{ padding: "16px 20px", borderBottom: "1px solid var(--tblr-border-color)", display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12 }}>
+          <div className="fd-drawer-backdrop" onClick={() => setSelectedLeadId(null)}>
+            <div className="fd-drawer" onClick={e => e.stopPropagation()} onPaste={handleDrawerPaste}>
+              <div style={{ padding: "18px 22px", borderBottom: "1px solid #edf2f9", display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12 }}>
                 <div style={{ minWidth: 0 }}>
                   <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                    <h3 style={{ fontSize: 16, fontWeight: 600, margin: 0 }}>
+                    <h3 style={{ fontSize: 17, fontWeight: 500, color: "#1c2d41", margin: 0 }}>
                       {activeLead?.company || activeLead?.name}
                     </h3>
                     <a
                       href={`https://wa.me/${activeLead?.phone?.replace(/\D/g, "")}`}
                       target="_blank"
                       rel="noreferrer"
-                      style={{ color: "var(--tblr-primary)", display: "inline-flex" }}
+                      style={{ color: "#5f76e8", display: "inline-flex" }}
                       title="Abrir no WhatsApp Oficial"
                     >
-                      <ExternalLink size={14} />
+                      <ExternalLink size={15} />
                     </a>
                   </div>
-                  <div style={{ fontSize: 12, color: "var(--tblr-secondary)", marginTop: 2, display: "flex", gap: 8, flexWrap: "wrap" }}>
-                    <span>{activeLead?.phone} · {activeLead?.category || "Locação B2B"}</span>
+                  <div style={{ fontSize: 12, color: "#7c8798", marginTop: 3, display: "flex", gap: 8, flexWrap: "wrap" }}>
+                    <span>{activeLead?.phone}</span>
+                    {activeLead?.category && <span>· {activeLead.category}</span>}
                     {typeof activeLead?.rating === "number" && (
-                      <span style={{ color: "#d97706", fontWeight: 600 }}>
+                      <span style={{ color: "#fb8c00", fontWeight: 500 }}>
                         ★ {activeLead.rating.toFixed(1)} ({activeLead.reviewsCount ?? 0})
                       </span>
                     )}
-                    {activeLead?.address && <span>· {activeLead.address.slice(0, 35)}</span>}
                   </div>
                 </div>
 
@@ -1173,35 +1372,35 @@ export default function Home() {
                     value={activeLead?.status || "READY"}
                     onChange={e => updateStatus(e.target.value)}
                     disabled={updatingStatus}
-                    className="tblr-input"
-                    style={{ height: 32, width: "auto", fontSize: 12, fontWeight: 600 }}
+                    className="fd-input"
+                    style={{ width: "auto", fontSize: 13, padding: "6px 10px" }}
                   >
                     {Object.entries(statusConfig).map(([k, v]) => (
                       <option key={k} value={k}>{v.label}</option>
                     ))}
                   </select>
 
-                  <button onClick={() => setSelectedLeadId(null)} className="tblr-btn tblr-btn-icon tblr-btn-sm">
-                    <X size={15} />
+                  <button onClick={() => setSelectedLeadId(null)} className="fd-btn fd-btn-sm" style={{ padding: "0 8px" }}>
+                    <X size={16} />
                   </button>
                 </div>
               </div>
 
-              {/* Sniper Preview URL & Print Bar */}
+              {/* Bloco Prévia Manual e Print */}
               {activeLead && (
-                <div style={{ padding: "12px 20px", background: "var(--tblr-bg-surface-secondary)", borderBottom: "1px solid var(--tblr-border-color)", display: "flex", flexDirection: "column", gap: 10 }}>
+                <div style={{ padding: "14px 22px", background: "#f9fbfd", borderBottom: "1px solid #edf2f9", display: "flex", flexDirection: "column", gap: 10 }}>
                   <form onSubmit={savePreviewUrl} style={{ display: "flex", gap: 8, alignItems: "center" }}>
                     <div style={{ position: "relative", flex: 1 }}>
-                      <Link2 size={14} style={{ position: "absolute", left: 10, top: "50%", transform: "translateY(-50%)", color: "var(--tblr-primary)" }} />
+                      <Link2 size={14} style={{ position: "absolute", left: 10, top: "50%", transform: "translateY(-50%)", color: "#5f76e8" }} />
                       <input
-                        className="tblr-input"
-                        style={{ paddingLeft: 32, height: 34, fontSize: 12 }}
+                        className="fd-input"
+                        style={{ paddingLeft: 32, fontSize: 13 }}
                         value={previewUrlInput}
                         onChange={e => setPreviewUrlInput(e.target.value)}
                         placeholder="Cole aqui o link externo da prévia manual (https://...)"
                       />
                     </div>
-                    <button type="submit" className="tblr-btn tblr-btn-primary tblr-btn-sm" style={{ height: 34 }} disabled={savingPreview}>
+                    <button type="submit" className="fd-btn fd-btn-primary fd-btn-sm" disabled={savingPreview}>
                       {savingPreview ? "..." : "Salvar Prévia"}
                     </button>
                   </form>
@@ -1209,13 +1408,13 @@ export default function Home() {
                   <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, flexWrap: "wrap" }}>
                     {trackedUrl ? (
                       <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", fontSize: 12 }}>
-                        <span className="tblr-badge purple">
-                          <Eye size={11} /> {activeLead.previewViews ?? 0} {activeLead.previewViews === 1 ? "clique" : "cliques"}
+                        <span className="fd-badge-pill primary">
+                          <Eye size={11} style={{ marginRight: 4 }} /> {activeLead.previewViews ?? 0} {activeLead.previewViews === 1 ? "clique" : "cliques"}
                         </span>
                         <button
                           type="button"
-                          className="tblr-btn tblr-btn-sm"
-                          style={{ height: 26, fontSize: 11 }}
+                          className="fd-btn fd-btn-sm"
+                          style={{ height: 26, padding: "0 10px" }}
                           onClick={() => {
                             navigator.clipboard.writeText(trackedUrl);
                             notify("Link rastreado copiado!");
@@ -1223,29 +1422,29 @@ export default function Home() {
                         >
                           <Copy size={11} /> Copiar /v/{activeLead.previewSlug}
                         </button>
-                        <a href={trackedUrl} target="_blank" rel="noreferrer" style={{ color: "var(--tblr-primary)", fontSize: 11, fontWeight: 600, textDecoration: "none", display: "inline-flex", alignItems: "center", gap: 3 }}>
+                        <a href={trackedUrl} target="_blank" rel="noreferrer" style={{ color: "#5f76e8", fontSize: 12, fontWeight: 500, display: "inline-flex", alignItems: "center", gap: 3 }}>
                           Testar <ExternalLink size={11} />
                         </a>
                       </div>
                     ) : (
-                      <span style={{ fontSize: 11, color: "var(--tblr-secondary)" }}>
+                      <span style={{ fontSize: 12, color: "#7c8798" }}>
                         Salve a URL da prévia manual para gerar o link rastreado <code>/v/slug</code>.
                       </span>
                     )}
 
                     <div>
                       {activeLead.previewImage ? (
-                        <div style={{ display: "flex", alignItems: "center", gap: 6, background: "var(--tblr-bg-surface)", border: "1px solid var(--tblr-border-color)", borderRadius: 4, padding: "2px 8px" }}>
-                          <img src={activeLead.previewImage} alt="Print da prévia" style={{ width: 26, height: 18, objectFit: "cover", borderRadius: 2 }} />
-                          <span style={{ fontSize: 11, fontWeight: 600, color: "var(--tblr-green)" }}>Print pronto</span>
-                          <button type="button" onClick={removePreviewImage} style={{ border: 0, background: "transparent", cursor: "pointer", color: "var(--tblr-secondary)", padding: 0, display: "grid", placeItems: "center" }}>
-                            <X size={12} />
+                        <div style={{ display: "flex", alignItems: "center", gap: 6, background: "#ffffff", border: "1px solid #e9ecef", borderRadius: 4, padding: "3px 8px" }}>
+                          <img src={activeLead.previewImage} alt="Print da prévia" style={{ width: 28, height: 20, objectFit: "cover", borderRadius: 2 }} />
+                          <span style={{ fontSize: 12, fontWeight: 500, color: "#22ca80" }}>Print pronto</span>
+                          <button type="button" onClick={removePreviewImage} style={{ border: 0, background: "transparent", cursor: "pointer", color: "#7c8798", padding: 0, display: "grid", placeItems: "center" }}>
+                            <X size={13} />
                           </button>
                         </div>
                       ) : (
-                        <label className="tblr-btn tblr-btn-sm" style={{ height: 26, fontSize: 11, borderStyle: "dashed", cursor: "pointer" }} title="Ou dê Ctrl+V em um print capturado!">
-                          <Upload size={11} />
-                          <span>Anexar Print (ou Ctrl+V)</span>
+                        <label className="fd-btn fd-btn-sm" style={{ height: 28, borderStyle: "dashed", cursor: "pointer" }} title="Ou dê Ctrl+V em um print capturado!">
+                          <Upload size={12} />
+                          <span>Anexar Print ou Ctrl+V</span>
                           <input
                             type="file"
                             accept="image/png,image/jpeg,image/webp"
@@ -1263,46 +1462,46 @@ export default function Home() {
                 </div>
               )}
 
-              {/* Follow-up Alert */}
+              {/* Alerta Follow up */}
               {followUp.due && (
-                <div style={{ padding: "10px 20px", background: "var(--tblr-yellow-lt)", borderBottom: "1px solid var(--tblr-border-color)", display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10 }}>
-                  <span style={{ fontSize: 12, fontWeight: 600, color: "#92400e" }}>
-                    Sem resposta há {followUp.daysSinceSent} dias — toque recomendado ({followUp.due === "DAY_5" ? "Dia +5" : "Dia +2"})
+                <div style={{ padding: "10px 22px", background: "rgba(253, 193, 106, 0.25)", borderBottom: "1px solid #edf2f9", display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10 }}>
+                  <span style={{ fontSize: 12, fontWeight: 500, color: "#1c2d41" }}>
+                    Sem resposta há {followUp.daysSinceSent} dias, toque recomendado ({followUp.due === "DAY_5" ? "Dia 5" : "Dia 2"})
                   </span>
                   <button
                     type="button"
-                    className="tblr-btn tblr-btn-sm"
+                    className="fd-btn fd-btn-sm fd-btn-dark"
                     onClick={() => loadFollowUp(followUp.due as "DAY_2" | "DAY_5")}
                   >
-                    Carregar Follow-up
+                    Carregar Follow up
                   </button>
                 </div>
               )}
 
-              {/* Chat Messages */}
-              <div style={{ flex: 1, overflowY: "auto", padding: "18px 20px", display: "flex", flexDirection: "column", gap: 10 }}>
+              {/* Chat Bubbles */}
+              <div style={{ flex: 1, overflowY: "auto", padding: "18px 22px", display: "flex", flexDirection: "column", gap: 12 }}>
                 {loadingChat ? (
-                  <div style={{ textAlign: "center", padding: 40, color: "var(--tblr-secondary)", fontSize: 13 }}>
+                  <div style={{ textAlign: "center", padding: 40, color: "#7c8798", fontSize: 14 }}>
                     Carregando conversa...
                   </div>
                 ) : activeLead?.messages?.length === 0 ? (
-                  <div style={{ padding: 24, background: "var(--tblr-bg-surface-secondary)", borderRadius: 6, border: "1px dashed var(--tblr-border-color)", textAlign: "center" }}>
-                    <div style={{ fontWeight: 600, fontSize: 14, marginBottom: 4 }}>
+                  <div style={{ padding: 24, background: "#f9fbfd", borderRadius: 4, border: "1px dashed #dee2e6", textAlign: "center" }}>
+                    <div style={{ fontWeight: 500, fontSize: 15, color: "#1c2d41", marginBottom: 4 }}>
                       {activeLead.previewUrl ? "Prévia pronta para envio direto!" : "Nenhuma mensagem enviada ainda"}
                     </div>
-                    <p style={{ fontSize: 12, color: "var(--tblr-secondary)", margin: "0 0 14px" }}>
+                    <p style={{ fontSize: 13, color: "#7c8798", margin: "0 0 14px" }}>
                       {activeLead.previewUrl
                         ? "Gere a mensagem direta já com o link rastreado e o print da página."
-                        : "Cole o link da prévia acima (e opcionalmente o print) para gerar a abordagem direta."}
+                        : "Cole o link da prévia acima e opcionalmente o print para gerar a abordagem direta."}
                     </p>
-                    <button className="tblr-btn tblr-btn-primary tblr-btn-sm" onClick={requestAiDraft} disabled={generatingDraft}>
+                    <button className="fd-btn fd-btn-primary fd-btn-rounded fd-btn-sm" onClick={requestAiDraft} disabled={generatingDraft}>
                       <Sparkles size={13} />
                       <span>{generatingDraft ? "Gerando..." : "Gerar Abordagem Direta"}</span>
                     </button>
                   </div>
                 ) : (
                   activeLead?.messages?.map(msg => (
-                    <div key={msg.id} className={msg.direction === "OUTBOUND" ? "tblr-chat-outbound" : "tblr-chat-inbound"}>
+                    <div key={msg.id} className={msg.direction === "OUTBOUND" ? "fd-chat-outbound" : "fd-chat-inbound"}>
                       {msg.mediaUrl && (
                         <img
                           src={msg.mediaUrl}
@@ -1311,7 +1510,7 @@ export default function Home() {
                         />
                       )}
                       <div style={{ whiteSpace: "pre-wrap" }}>{msg.body}</div>
-                      <div style={{ fontSize: 10, opacity: 0.75, marginTop: 4, textAlign: "right" }}>
+                      <div style={{ fontSize: 10, color: "#7c8798", marginTop: 4, textAlign: "right" }}>
                         {new Date(msg.createdAt).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}
                         {msg.direction === "OUTBOUND" && ` · ${msg.status}`}
                       </div>
@@ -1321,19 +1520,19 @@ export default function Home() {
               </div>
 
               {/* Composer */}
-              <div style={{ padding: "14px 20px", borderTop: "1px solid var(--tblr-border-color)", background: "var(--tblr-bg-surface-secondary)", display: "flex", flexDirection: "column", gap: 10 }}>
+              <div style={{ padding: "14px 22px", borderTop: "1px solid #edf2f9", background: "#f9fbfd", display: "flex", flexDirection: "column", gap: 10 }}>
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
                   <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-                    <span style={{ display: "inline-flex", alignItems: "center", gap: 5, fontSize: 12, fontWeight: 600, color: "var(--tblr-primary)" }}>
-                      <Bot size={14} /> Abordagem Sniper
+                    <span style={{ display: "inline-flex", alignItems: "center", gap: 5, fontSize: 13, fontWeight: 500, color: "#5f76e8" }}>
+                      <Bot size={15} /> Abordagem Sniper
                     </span>
                     {activeLead?.previewImage && (
-                      <label style={{ display: "inline-flex", alignItems: "center", gap: 5, fontSize: 12, fontWeight: 500, cursor: "pointer" }}>
+                      <label style={{ display: "inline-flex", alignItems: "center", gap: 5, fontSize: 12, fontWeight: 500, cursor: "pointer", color: "#1c2d41" }}>
                         <input
                           type="checkbox"
                           checked={includePreviewImage}
                           onChange={e => setIncludePreviewImage(e.target.checked)}
-                          style={{ accentColor: "var(--tblr-primary)" }}
+                          style={{ accentColor: "#5f76e8" }}
                         />
                         <ImageIcon size={13} />
                         <span>Enviar print junto</span>
@@ -1341,15 +1540,15 @@ export default function Home() {
                     )}
                   </div>
 
-                  <button type="button" className="tblr-btn tblr-btn-sm" onClick={requestAiDraft} disabled={generatingDraft}>
-                    <Sparkles size={12} style={{ color: "var(--tblr-primary)" }} />
+                  <button type="button" className="fd-btn fd-btn-sm fd-btn-rounded" onClick={requestAiDraft} disabled={generatingDraft}>
+                    <Sparkles size={12} style={{ color: "#5f76e8" }} />
                     {generatingDraft ? "Gerando..." : "Sugerir Pitch Direto"}
                   </button>
                 </div>
 
                 <form onSubmit={handleSendMessage} style={{ display: "flex", gap: 8, alignItems: "flex-end" }}>
                   <textarea
-                    className="tblr-textarea"
+                    className="fd-textarea"
                     rows={3}
                     value={composerText}
                     onChange={e => setComposerText(e.target.value)}
@@ -1360,8 +1559,8 @@ export default function Home() {
                   />
                   <button
                     type="submit"
-                    className="tblr-btn tblr-btn-primary"
-                    style={{ height: 40, padding: "0 16px", flexShrink: 0 }}
+                    className="fd-btn fd-btn-primary fd-btn-rounded"
+                    style={{ height: 40, padding: "0 18px", flexShrink: 0 }}
                     disabled={sendingMsg || !composerText.trim()}
                   >
                     <Send size={14} />
@@ -1376,64 +1575,64 @@ export default function Home() {
 
       {/* Modal Add Lead */}
       {showAddModal && (
-        <div className="tblr-modal-backdrop" onClick={() => setShowAddModal(false)}>
-          <div className="tblr-modal" onClick={e => e.stopPropagation()}>
-            <div className="tblr-card-header">
-              <h3 className="tblr-card-title">Cadastrar Lead Sniper</h3>
-              <button onClick={() => setShowAddModal(false)} className="tblr-btn tblr-btn-icon tblr-btn-sm">
-                <X size={14} />
+        <div className="fd-modal-backdrop" onClick={() => setShowAddModal(false)}>
+          <div className="fd-modal" onClick={e => e.stopPropagation()}>
+            <div style={{ padding: "18px 24px", borderBottom: "1px solid #edf2f9", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+              <h3 style={{ fontSize: 18, fontWeight: 500, color: "#1c2d41", margin: 0 }}>Cadastrar Lead Sniper</h3>
+              <button onClick={() => setShowAddModal(false)} className="fd-btn fd-btn-sm" style={{ padding: "0 8px" }}>
+                <X size={15} />
               </button>
             </div>
-            <form onSubmit={addLead} className="tblr-card-body" style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+            <form onSubmit={addLead} style={{ padding: 24, display: "flex", flexDirection: "column", gap: 14 }}>
               <div>
-                <label className="tblr-subheader" style={{ display: "block", marginBottom: 4 }}>Nome da Locadora / Empresa</label>
-                <input className="tblr-input" value={form.company} onChange={e => setForm({ ...form, company: e.target.value })} placeholder="Ex.: Locadora Forte Equipamentos" />
+                <label style={{ display: "block", fontSize: 13, fontWeight: 500, color: "#1c2d41", marginBottom: 4 }}>Nome da Locadora ou Empresa</label>
+                <input className="fd-input" value={form.company} onChange={e => setForm({ ...form, company: e.target.value })} placeholder="Ex.: Locadora Forte Equipamentos" />
               </div>
 
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
                 <div>
-                  <label className="tblr-subheader" style={{ display: "block", marginBottom: 4 }}>Contato / Responsável</label>
-                  <input className="tblr-input" required value={form.name} onChange={e => setForm({ ...form, name: e.target.value })} placeholder="Ex.: Comercial / Marcos" />
+                  <label style={{ display: "block", fontSize: 13, fontWeight: 500, color: "#1c2d41", marginBottom: 4 }}>Contato ou Responsável</label>
+                  <input className="fd-input" required value={form.name} onChange={e => setForm({ ...form, name: e.target.value })} placeholder="Ex.: Comercial" />
                 </div>
                 <div>
-                  <label className="tblr-subheader" style={{ display: "block", marginBottom: 4 }}>WhatsApp (com DDD)</label>
-                  <input className="tblr-input" required value={form.phone} onChange={e => setForm({ ...form, phone: e.target.value })} placeholder="5519999999999" />
-                </div>
-              </div>
-
-              <div style={{ display: "grid", gridTemplateColumns: "1.4fr 0.8fr 0.8fr", gap: 10 }}>
-                <div>
-                  <label className="tblr-subheader" style={{ display: "block", marginBottom: 4 }}>Segmento</label>
-                  <input className="tblr-input" value={form.category} onChange={e => setForm({ ...form, category: e.target.value })} />
-                </div>
-                <div>
-                  <label className="tblr-subheader" style={{ display: "block", marginBottom: 4 }}>Nota Google</label>
-                  <input className="tblr-input" value={form.rating} onChange={e => setForm({ ...form, rating: e.target.value })} placeholder="4.8" />
-                </div>
-                <div>
-                  <label className="tblr-subheader" style={{ display: "block", marginBottom: 4 }}>Avaliações</label>
-                  <input className="tblr-input" type="number" min={0} value={form.reviewsCount} onChange={e => setForm({ ...form, reviewsCount: e.target.value })} placeholder="35" />
+                  <label style={{ display: "block", fontSize: 13, fontWeight: 500, color: "#1c2d41", marginBottom: 4 }}>WhatsApp (com DDD)</label>
+                  <input className="fd-input" required value={form.phone} onChange={e => setForm({ ...form, phone: e.target.value })} placeholder="5519999999999" />
                 </div>
               </div>
 
-              <div>
-                <label className="tblr-subheader" style={{ display: "block", marginBottom: 4 }}>Cidade / Endereço</label>
-                <input className="tblr-input" value={form.address} onChange={e => setForm({ ...form, address: e.target.value })} placeholder="Campinas, SP" />
+              <div style={{ display: "grid", gridTemplateColumns: "1.4fr 0.8fr 0.8fr", gap: 12 }}>
+                <div>
+                  <label style={{ display: "block", fontSize: 13, fontWeight: 500, color: "#1c2d41", marginBottom: 4 }}>Segmento</label>
+                  <input className="fd-input" value={form.category} onChange={e => setForm({ ...form, category: e.target.value })} />
+                </div>
+                <div>
+                  <label style={{ display: "block", fontSize: 13, fontWeight: 500, color: "#1c2d41", marginBottom: 4 }}>Nota Google</label>
+                  <input className="fd-input" value={form.rating} onChange={e => setForm({ ...form, rating: e.target.value })} placeholder="4.8" />
+                </div>
+                <div>
+                  <label style={{ display: "block", fontSize: 13, fontWeight: 500, color: "#1c2d41", marginBottom: 4 }}>Avaliações</label>
+                  <input className="fd-input" type="number" min={0} value={form.reviewsCount} onChange={e => setForm({ ...form, reviewsCount: e.target.value })} placeholder="35" />
+                </div>
               </div>
 
               <div>
-                <label className="tblr-subheader" style={{ display: "block", marginBottom: 4 }}>Site Atual (deixe vazio se não tiver)</label>
-                <input className="tblr-input" value={form.website} onChange={e => setForm({ ...form, website: e.target.value })} placeholder="Vazio ou https://..." />
+                <label style={{ display: "block", fontSize: 13, fontWeight: 500, color: "#1c2d41", marginBottom: 4 }}>Cidade e Endereço</label>
+                <input className="fd-input" value={form.address} onChange={e => setForm({ ...form, address: e.target.value })} placeholder="Campinas, SP" />
               </div>
 
               <div>
-                <label className="tblr-subheader" style={{ display: "block", marginBottom: 4 }}>URL da Prévia Manual (opcional)</label>
-                <input className="tblr-input" value={form.previewUrl} onChange={e => setForm({ ...form, previewUrl: e.target.value })} placeholder="https://previa.seudominio.com" />
+                <label style={{ display: "block", fontSize: 13, fontWeight: 500, color: "#1c2d41", marginBottom: 4 }}>Site Atual (deixe vazio se não tiver)</label>
+                <input className="fd-input" value={form.website} onChange={e => setForm({ ...form, website: e.target.value })} placeholder="Vazio ou https://..." />
               </div>
 
-              <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, marginTop: 8 }}>
-                <button type="button" className="tblr-btn" onClick={() => setShowAddModal(false)}>Cancelar</button>
-                <button type="submit" className="tblr-btn tblr-btn-primary" disabled={loading}>
+              <div>
+                <label style={{ display: "block", fontSize: 13, fontWeight: 500, color: "#1c2d41", marginBottom: 4 }}>URL da Prévia Manual (opcional)</label>
+                <input className="fd-input" value={form.previewUrl} onChange={e => setForm({ ...form, previewUrl: e.target.value })} placeholder="https://previa.seudominio.com" />
+              </div>
+
+              <div style={{ display: "flex", justifyContent: "flex-end", gap: 10, marginTop: 8 }}>
+                <button type="button" className="fd-btn fd-btn-rounded" onClick={() => setShowAddModal(false)}>Cancelar</button>
+                <button type="submit" className="fd-btn fd-btn-primary fd-btn-rounded" disabled={loading}>
                   {loading ? "Salvando..." : "Salvar Lead"}
                 </button>
               </div>
@@ -1444,26 +1643,26 @@ export default function Home() {
 
       {/* Modal Add Suppression */}
       {showAddSuppressionModal && (
-        <div className="tblr-modal-backdrop" onClick={() => setShowAddSuppressionModal(false)}>
-          <div className="tblr-modal" style={{ width: "min(440px, 100%)" }} onClick={e => e.stopPropagation()}>
-            <div className="tblr-card-header">
-              <h3 className="tblr-card-title">Bloquear Número (Supressão)</h3>
-              <button onClick={() => setShowAddSuppressionModal(false)} className="tblr-btn tblr-btn-icon tblr-btn-sm">
-                <X size={14} />
+        <div className="fd-modal-backdrop" onClick={() => setShowAddSuppressionModal(false)}>
+          <div className="fd-modal" style={{ width: "min(440px, 100%)" }} onClick={e => e.stopPropagation()}>
+            <div style={{ padding: "18px 24px", borderBottom: "1px solid #edf2f9", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+              <h3 style={{ fontSize: 18, fontWeight: 500, color: "#1c2d41", margin: 0 }}>Bloquear Número</h3>
+              <button onClick={() => setShowAddSuppressionModal(false)} className="fd-btn fd-btn-sm" style={{ padding: "0 8px" }}>
+                <X size={15} />
               </button>
             </div>
-            <form onSubmit={addSuppression} className="tblr-card-body" style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+            <form onSubmit={addSuppression} style={{ padding: 24, display: "flex", flexDirection: "column", gap: 14 }}>
               <div>
-                <label className="tblr-subheader" style={{ display: "block", marginBottom: 4 }}>WhatsApp para Bloqueio</label>
-                <input className="tblr-input" required value={suppressionForm.phone} onChange={e => setSuppressionForm({ ...suppressionForm, phone: e.target.value })} placeholder="5511999999999" />
+                <label style={{ display: "block", fontSize: 13, fontWeight: 500, color: "#1c2d41", marginBottom: 4 }}>WhatsApp para Bloqueio</label>
+                <input className="fd-input" required value={suppressionForm.phone} onChange={e => setSuppressionForm({ ...suppressionForm, phone: e.target.value })} placeholder="5511999999999" />
               </div>
               <div>
-                <label className="tblr-subheader" style={{ display: "block", marginBottom: 4 }}>Motivo</label>
-                <input className="tblr-input" required value={suppressionForm.reason} onChange={e => setSuppressionForm({ ...suppressionForm, reason: e.target.value })} />
+                <label style={{ display: "block", fontSize: 13, fontWeight: 500, color: "#1c2d41", marginBottom: 4 }}>Motivo</label>
+                <input className="fd-input" required value={suppressionForm.reason} onChange={e => setSuppressionForm({ ...suppressionForm, reason: e.target.value })} />
               </div>
-              <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, marginTop: 8 }}>
-                <button type="button" className="tblr-btn" onClick={() => setShowAddSuppressionModal(false)}>Cancelar</button>
-                <button type="submit" className="tblr-btn tblr-btn-primary" disabled={loading}>
+              <div style={{ display: "flex", justifyContent: "flex-end", gap: 10, marginTop: 8 }}>
+                <button type="button" className="fd-btn fd-btn-rounded" onClick={() => setShowAddSuppressionModal(false)}>Cancelar</button>
+                <button type="submit" className="fd-btn fd-btn-primary fd-btn-rounded" disabled={loading}>
                   {loading ? "Bloqueando..." : "Confirmar Bloqueio"}
                 </button>
               </div>
