@@ -27,7 +27,7 @@ export async function POST(req: NextRequest) {
   if (!sameOrigin(req)) return NextResponse.json({ error: "Origem inválida" }, { status: 403 });
   const parsed = inputSchema.safeParse(await req.json().catch(() => null));
   if (!parsed.success) return NextResponse.json({ error: parsed.error.issues }, { status: 400 });
-  if (!getActiveSearchProvider()) return NextResponse.json({ error: "Configure SERPER_API_KEY (grátis) ou OUTSCRAPER_API_KEY antes de criar buscas" }, { status: 503 });
+  if (!getActiveSearchProvider()) return NextResponse.json({ error: "Configure APIFY_TOKEN (grátis mensal) ou SERPER_API_KEY antes de criar buscas" }, { status: 503 });
   const data = parsed.data;
   const now = new Date();
   const campaign = await db.campaign.create({ data: { ...data, regionCode: data.regionCode?.toUpperCase() || null, criteria: data.searchTerms.join(", "), lastSearchRequestedAt: data.enabled ? now : null, lastSearchStatus: data.enabled ? "QUEUED" : null } });

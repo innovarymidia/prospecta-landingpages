@@ -12,6 +12,7 @@ import {
   shouldUseInngest,
 } from "@/lib/safety";
 import { getActiveSearchProvider } from "@/lib/search-provider";
+import { searchApifyCampaign } from "@/lib/apify";
 import { searchSerperCampaign } from "@/lib/serper";
 import { getMessagingEnabled } from "@/lib/settings";
 import { buildTrackedPreviewUrl, pickNextQueueCampaignId, resolveAppBaseUrl } from "@/lib/sniper";
@@ -375,7 +376,24 @@ export async function failSearchRunRecord(runId: string, campaignId: string, err
 }
 
 /**
- * Executa busca síncrona direta (Serper Maps) fora do Inngest.
+ * Executa busca e importação em provedores síncronos/diretos (Apify ou Serper Maps).
+ */
+export async function runSyncMapsSearch(
+  provider: "apify" | "serper",
+  campaign: NonNullable<Awaited<ReturnType<typeof startSearchRunRecord>>>["campaign"]
+): Promise<{ found: number; added: number }> {
+  const candidates =
+    provider === "apify" ? await searchApifyCampaign(campaign) : await searchSerperCampaign(campaign);
+  const summary = await importLeadCandidates(candidates, {
+    websiteTarget: campaign.websiteTarget,
+    requireMapsScore: true,
+    defaultSource: provider === "apify" ? "Apify Maps" : "Serper Maps",
+  });
+  return { found: summary.qualified, added: summary.added };
+}
+
+/**
+ * Executa busca síncrona direta (Apify ou Serper Maps) fora do Inngest.
  */
 export async function executeDirectCampaignSearch(campaignId: string, force = false) {
   const run = await startSearchRunRecord(campaignId, force);
@@ -383,17 +401,11 @@ export async function executeDirectCampaignSearch(campaignId: string, force = fa
 
   try {
     const provider = getActiveSearchProvider();
-    if (!provider) throw new Error("Configure SERPER_API_KEY (grátis) para buscar no Maps");
+    if (!provider) throw new Error("Configure APIFY_TOKEN (grátis mensal) ou SERPER_API_KEY para buscar no Maps");
 
     let imported: { found: number; added: number };
-    if (provider === "serper") {
-      const candidates = await searchSerperCampaign(run.campaign);
-      const summary = await importLeadCandidates(candidates, {
-        websiteTarget: run.campaign.websiteTarget,
-        requireMapsScore: true,
-        defaultSource: "Serper Maps",
-      });
-      imported = { found: summary.qualified, added: summary.added };
+    if (provider === "apify" || provider === "serper") {
+      imported = await runSyncMapsSearch(provider, run.campaign);
     } else {
       const submitted = await submitSearch(run.campaign);
       if (submitted.failure) throw new Error("Outscraper recusou a solicitação de busca");
@@ -404,7 +416,7 @@ export async function executeDirectCampaignSearch(campaignId: string, force = fa
         if (state.failure) throw new Error("Outscraper terminou com falha");
         ready = state.ready;
       }
-      if (!ready) throw new Error("Outscraper demorou acima do limite sem Inngest; prefira SERPER_API_KEY");
+      if (!ready) throw new Error("Outscraper demorou acima do limite sem Inngest; prefira APIFY_TOKEN");
       imported = await importSearchResults(submitted.taskId, campaignId);
     }
 

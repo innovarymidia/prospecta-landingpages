@@ -59,7 +59,7 @@ function formatIntervalLabel(hours: number): string {
 interface CampaignsPanelProps {
   onNotify?: (msg: string) => void;
   searchConfigured?: boolean;
-  searchProvider?: "serper" | "outscraper" | null;
+  searchProvider?: "apify" | "serper" | "outscraper" | null;
   onOpenCsvImport?: () => void;
 }
 
@@ -213,8 +213,8 @@ export default function CampaignsPanel({
           <div style={{ fontSize: 13, color: "var(--fd-gray-700)", lineHeight: 1.45 }}>
             <strong style={{ color: "var(--fd-dark)" }}>Esteira diária inteligente (1 cidade nova por dia):</strong> a captura roda independente dos envios de WhatsApp, filtrando empresas com nota 4,0 ou mais, mínimo 5 avaliações e sem site próprio (incluindo Instagram).{" "}
             {searchConfigured === false
-              ? "Para ativar grátis sem cartão, configure SERPER_API_KEY (2.500 buscas gratuitas no Maps) ou importe uma planilha pelo botão Importar CSV."
-              : `Provedor ativo: ${searchProvider === "serper" ? "Serper Maps (gratuito)" : "Google Maps API"}. Você pode usar Buscar agora a qualquer momento.`}
+              ? "Para ativar grátis todo mês sem cartão, configure APIFY_TOKEN (US$ 5/mês grátis) ou importe uma planilha pelo botão Importar CSV."
+              : `Provedor ativo: ${searchProvider === "apify" ? "Apify Maps (US$ 5 mensais grátis)" : searchProvider === "serper" ? "Serper Maps (gratuito)" : "Google Maps API"}. Você pode usar Buscar agora a qualquer momento.`}
           </div>
         </div>
 

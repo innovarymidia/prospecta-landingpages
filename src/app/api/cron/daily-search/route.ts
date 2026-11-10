@@ -41,3 +41,4 @@ export async function GET(req: NextRequest) {
   const result = await executeDirectCampaignSearch(campaignId, false);
   return NextResponse.json({ ok: true, campaignId, ...result });
 }
+

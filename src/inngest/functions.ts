@@ -1,9 +1,7 @@
 import { inngest } from "./client";
-import { importLeadCandidates } from "@/lib/lead-import";
 import { importSearchResults, pollSearch, submitSearch } from "@/lib/outscraper";
 import { getInboundBufferSeconds } from "@/lib/safety";
 import { getActiveSearchProvider } from "@/lib/search-provider";
-import { searchSerperCampaign } from "@/lib/serper";
 import { getMessagingEnabled } from "@/lib/settings";
 import {
   claimNextDailyCampaign,
@@ -12,6 +10,7 @@ import {
   finishSearchRunRecord,
   generateContextualReplyText,
   loadInboundReplyContext,
+  runSyncMapsSearch,
   saveAiReplyDraft,
   saveAudioTranscription,
   startSearchRunRecord,
@@ -139,19 +138,11 @@ export const searchCampaign = inngest.createFunction(
 
     try {
       const provider = getActiveSearchProvider();
-      if (!provider) throw new Error("Configure SERPER_API_KEY (grátis) ou OUTSCRAPER_API_KEY");
+      if (!provider) throw new Error("Configure APIFY_TOKEN, SERPER_API_KEY ou OUTSCRAPER_API_KEY");
 
       let imported: { found: number; added: number };
-      if (provider === "serper") {
-        const result = await step.run("search-and-import-serper", async () => {
-          const candidates = await searchSerperCampaign(run.campaign);
-          return importLeadCandidates(candidates, {
-            websiteTarget: run.campaign.websiteTarget,
-            requireMapsScore: true,
-            defaultSource: "Serper Maps",
-          });
-        });
-        imported = { found: result.qualified, added: result.added };
+      if (provider === "apify" || provider === "serper") {
+        imported = await step.run(`search-and-import-${provider}`, () => runSyncMapsSearch(provider, run.campaign));
       } else {
         const submitted = await step.run("submit-outscraper-task", () => submitSearch(run.campaign));
         if (submitted.failure) throw new Error("Outscraper recusou a solicitação de busca");
