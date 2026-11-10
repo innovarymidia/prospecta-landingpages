@@ -104,6 +104,46 @@ export function buildTrackedPreviewUrl(slug: string | null | undefined, baseUrl?
   return cleanBase ? `${cleanBase}/v/${encodeURIComponent(slug)}` : `/v/${encodeURIComponent(slug)}`;
 }
 
+export interface MapsProfileInput {
+  providerId?: string | null;
+  name?: string | null;
+  company?: string | null;
+  address?: string | null;
+}
+
+/**
+ * Monta o link direto para o perfil da empresa no Google Meu Negócio / Google Maps.
+ * Usa place_id (Apify e Outscraper), cid (Serper) ou busca por nome e endereço.
+ */
+export function getGoogleMapsProfileUrl(lead: MapsProfileInput): string | null {
+  const rawId = (lead.providerId || "").trim();
+  if (rawId) {
+    if (rawId.startsWith("serper:")) {
+      const cid = rawId.slice("serper:".length).trim();
+      if (cid) {
+        return /^\d+$/.test(cid)
+          ? `https://www.google.com/maps?cid=${encodeURIComponent(cid)}`
+          : `https://www.google.com/maps/place/?q=place_id:${encodeURIComponent(cid)}`;
+      }
+    }
+
+    const colonIdx = rawId.indexOf(":");
+    const idValue = colonIdx >= 0 ? rawId.slice(colonIdx + 1).trim() : rawId;
+    if (idValue) {
+      if (!/^0x[0-9a-f]+:0x[0-9a-f]+$/i.test(idValue)) {
+        return `https://www.google.com/maps/place/?q=place_id:${encodeURIComponent(idValue)}`;
+      }
+    }
+  }
+
+  const fallbackQuery = [lead.company?.trim() || lead.name?.trim(), lead.address?.trim()]
+    .filter(Boolean)
+    .join(" ")
+    .trim();
+  if (!fallbackQuery) return null;
+  return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(fallbackQuery)}`;
+}
+
 /**
  * Verifica se a empresa possui site próprio real (redes sociais e agregadores não contam).
  */

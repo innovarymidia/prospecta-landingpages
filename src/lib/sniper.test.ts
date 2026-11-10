@@ -7,6 +7,7 @@ import {
   formatRelativeTimeBr,
   generatePreviewSlug,
   getFollowUpStage,
+  getGoogleMapsProfileUrl,
   getLeadGoldScore,
   hasRealWebsite,
   isBotOrPreviewUserAgent,
@@ -231,4 +232,24 @@ test("resolveAppBaseUrl prefers APP_URL, falls back to VERCEL_PROJECT_PRODUCTION
     "https://preview.local:3000"
   );
   assert.equal(resolveAppBaseUrl("", "javascript:alert(1)", ""), "");
+});
+
+test("getGoogleMapsProfileUrl builds direct profile URLs for Apify, Serper and manual leads", () => {
+  assert.equal(
+    getGoogleMapsProfileUrl({ providerId: "apify:ChIJ123abc", company: "Locadora Forte" }),
+    "https://www.google.com/maps/place/?q=place_id:ChIJ123abc"
+  );
+  assert.equal(
+    getGoogleMapsProfileUrl({ providerId: "serper:987654321", company: "Locadora Forte" }),
+    "https://www.google.com/maps?cid=987654321"
+  );
+  assert.equal(
+    getGoogleMapsProfileUrl({ providerId: "outscraper:0x94c8:0x1234", company: "Locadora Forte", address: "Campinas, SP" }),
+    "https://www.google.com/maps/search/?api=1&query=Locadora%20Forte%20Campinas%2C%20SP"
+  );
+  assert.equal(
+    getGoogleMapsProfileUrl({ providerId: null, company: "Locadora Beta", address: "Curitiba, PR" }),
+    "https://www.google.com/maps/search/?api=1&query=Locadora%20Beta%20Curitiba%2C%20PR"
+  );
+  assert.equal(getGoogleMapsProfileUrl({}), null);
 });

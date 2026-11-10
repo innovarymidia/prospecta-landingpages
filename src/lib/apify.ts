@@ -57,6 +57,19 @@ export function buildApifyRunInput(campaign: ApifySearchCampaign) {
   };
 }
 
+function formatApifyHours(rawHours: unknown): string | null {
+  if (typeof rawHours === "string") return rawHours.trim().slice(0, 200) || null;
+  if (!Array.isArray(rawHours)) return null;
+  const parts: string[] = [];
+  for (const row of rawHours.slice(0, 3)) {
+    if (!row || typeof row !== "object") continue;
+    const day = readStr(row as Record<string, unknown>, "day");
+    const hours = readStr(row as Record<string, unknown>, "hours").replace(/\bto\b/gi, "às");
+    if (day && hours) parts.push(`${day}: ${hours}`);
+  }
+  return parts.length ? parts.join(" · ").slice(0, 200) : null;
+}
+
 /**
  * Converte registros do dataset da Apify para o formato único do importador.
  * Importante: não usa item.url (que é o link do Google Maps) como site próprio da empresa.
@@ -77,6 +90,7 @@ export function parseApifyPlaces(items: unknown, locationLabel: string): RawLead
     const closed = Boolean(item.permanentlyClosed) || Boolean(item.temporarilyClosed);
     const placeId = readStr(item, "placeId", "cid");
     const queryTerm = readStr(item, "searchString") || locationLabel;
+    const description = readStr(item, "ownerDescription", "description");
 
     candidates.push({
       name,
@@ -88,6 +102,8 @@ export function parseApifyPlaces(items: unknown, locationLabel: string): RawLead
       businessStatus: closed ? "CLOSED" : "OPERATIONAL",
       rating: readNum(item, "totalScore", "rating"),
       reviewsCount: readNum(item, "reviewsCount"),
+      hours: formatApifyHours(item.openingHours),
+      notes: description || null,
       providerId: placeId ? `apify:${placeId}` : null,
       source: `Apify: ${queryTerm}`,
     });

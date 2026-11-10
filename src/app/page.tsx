@@ -37,6 +37,7 @@ import {
   buildTrackedPreviewUrl,
   extractRegionLabel,
   getFollowUpStage,
+  getGoogleMapsProfileUrl,
   getLeadGoldScore,
   hasRealWebsite,
   sortHotLeads,
@@ -1162,6 +1163,7 @@ export default function Home() {
                           const realSite = hasRealWebsite(l.website);
                           const displayName = l.company || l.name;
                           const avColor = avatarPalette[idx % avatarPalette.length];
+                          const mapsProfileUrl = getGoogleMapsProfileUrl(l);
 
                           return (
                             <tr key={l.id} style={{ cursor: "pointer" }} onClick={() => openConversation(l.id)}>
@@ -1189,6 +1191,27 @@ export default function Home() {
                                   <div style={{ fontSize: 12, color: "#fdc16a", fontWeight: 500, marginTop: 2 }}>
                                     ★ {l.rating.toFixed(1)} ({l.reviewsCount ?? 0} avaliações)
                                   </div>
+                                )}
+                                {mapsProfileUrl && (
+                                  <a
+                                    href={mapsProfileUrl}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    onClick={e => e.stopPropagation()}
+                                    style={{
+                                      display: "inline-flex",
+                                      alignItems: "center",
+                                      gap: 4,
+                                      fontSize: 12,
+                                      fontWeight: 500,
+                                      color: "var(--fd-primary)",
+                                      marginTop: 3,
+                                    }}
+                                    title="Abrir perfil no Google Meu Negócio"
+                                  >
+                                    <MapPin size={11} />
+                                    <span>Ver no Google</span>
+                                  </a>
                                 )}
                               </td>
                               <td className="fd-col-hide-sm" style={{ fontWeight: 500, color: "var(--fd-dark)" }}>{l.phone}</td>

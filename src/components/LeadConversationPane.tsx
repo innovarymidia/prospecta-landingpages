@@ -8,6 +8,7 @@ import {
   Eye,
   Image as ImageIcon,
   Link2,
+  MapPin,
   MessageSquare,
   Send,
   Sparkles,
@@ -15,7 +16,7 @@ import {
   X,
 } from "lucide-react";
 import { AI_STOPPED_STATUSES } from "@/lib/safety";
-import { formatRelativeTimeBr, getFollowUpStage } from "@/lib/sniper";
+import { formatRelativeTimeBr, getFollowUpStage, getGoogleMapsProfileUrl } from "@/lib/sniper";
 
 export type Message = {
   id: string;
@@ -38,6 +39,7 @@ export type Lead = {
   rating?: number | null;
   reviewsCount?: number | null;
   hours?: string | null;
+  providerId?: string | null;
   previewUrl?: string | null;
   previewSlug?: string | null;
   previewImage?: string | null;
@@ -187,6 +189,7 @@ export default function LeadConversationPane({
   }
 
   const followUp = lead ? getFollowUpStage(lead) : { due: false as const, daysSinceSent: 0 };
+  const mapsProfileUrl = lead ? getGoogleMapsProfileUrl(lead) : null;
   const statusOptions = Array.from(
     new Set(lead?.status ? [lead.status, ...SELECTABLE_STATUSES] : SELECTABLE_STATUSES)
   );
@@ -248,7 +251,7 @@ export default function LeadConversationPane({
                 </a>
               )}
             </div>
-            <div style={{ fontSize: 12, color: "var(--fd-body-color)", marginTop: 2, display: "flex", gap: 8, flexWrap: "wrap" }}>
+            <div style={{ fontSize: 12, color: "var(--fd-body-color)", marginTop: 2, display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
               <span>{lead?.phone}</span>
               {lead?.category && <span className="fd-hide-sm">· {lead.category}</span>}
               {typeof lead?.rating === "number" && (
@@ -256,7 +259,27 @@ export default function LeadConversationPane({
                   ★ {lead.rating.toFixed(1)} ({lead.reviewsCount ?? 0})
                 </span>
               )}
+              {mapsProfileUrl && (
+                <a
+                  href={mapsProfileUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="fd-badge-pill primary"
+                  style={{ display: "inline-flex", alignItems: "center", gap: 4, textDecoration: "none", cursor: "pointer" }}
+                  title="Ver fotos, avaliações e detalhes no Google Meu Negócio"
+                >
+                  <MapPin size={11} />
+                  <span>Ver no Google Meu Negócio</span>
+                  <ExternalLink size={10} />
+                </a>
+              )}
             </div>
+            {(lead?.address || lead?.hours) && (
+              <div style={{ fontSize: 11, color: "var(--fd-body-color)", marginTop: 4, display: "flex", gap: 8, flexWrap: "wrap" }}>
+                {lead.address && <span>{lead.address}</span>}
+                {lead.hours && <span>· {lead.hours}</span>}
+              </div>
+            )}
           </div>
         </div>
 

@@ -35,6 +35,11 @@ test("parseApifyPlaces maps phoneUnformatted, rating and avoids Google Maps url 
       placeId: "ChIJ123",
       permanentlyClosed: false,
       searchString: "locadora de equipamentos",
+      ownerDescription: "Locação de andaimes e betoneiras.",
+      openingHours: [
+        { day: "segunda-feira", hours: "08:00 to 17:00" },
+        { day: "terça-feira", hours: "08:00 to 17:00" },
+      ],
     },
     {
       title: "Empresa Fechada",
@@ -53,6 +58,8 @@ test("parseApifyPlaces maps phoneUnformatted, rating and avoids Google Maps url 
   assert.equal(parsed[0].providerId, "apify:ChIJ123");
   assert.equal(parsed[0].rating, 4.8);
   assert.equal(parsed[0].reviewsCount, 31);
+  assert.equal(parsed[0].hours, "segunda-feira: 08:00 às 17:00 · terça-feira: 08:00 às 17:00");
+  assert.equal(parsed[0].notes, "Locação de andaimes e betoneiras.");
   assert.equal(parsed[1].businessStatus, "CLOSED");
 });
 

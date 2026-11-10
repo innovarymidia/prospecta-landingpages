@@ -49,6 +49,7 @@ export async function GET(req: NextRequest) {
       rating: true,
       reviewsCount: true,
       hours: true,
+      providerId: true,
       previewUrl: true,
       previewSlug: true,
       previewViews: true,
