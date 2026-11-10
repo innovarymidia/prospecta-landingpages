@@ -84,3 +84,63 @@ export async function getMediaBase64(key: { id: string; remoteJid?: string; from
     return null;
   }
 }
+
+export interface EvolutionConnectionStatus {
+  configured: boolean;
+  connected: boolean;
+  state: string;
+  error?: string;
+}
+
+/**
+ * Consulta o estado real da instancia WhatsApp na Evolution API v2.
+ */
+export async function checkEvolutionConnection(): Promise<EvolutionConnectionStatus> {
+  const base = process.env.EVOLUTION_API_URL?.replace(/\/$/, "");
+  const instance = process.env.EVOLUTION_INSTANCE;
+  const apiKey = process.env.EVOLUTION_API_KEY;
+  if (!base || !instance || !apiKey) {
+    return {
+      configured: false,
+      connected: false,
+      state: "unconfigured",
+      error: "Credenciais do WhatsApp ausentes no servidor",
+    };
+  }
+
+  try {
+    const response = await fetch(`${base}/instance/connectionState/${encodeURIComponent(instance)}`, {
+      method: "GET",
+      headers: { apikey: apiKey },
+      cache: "no-store",
+      signal: AbortSignal.timeout(4_500),
+    });
+
+    if (!response.ok) {
+      return {
+        configured: true,
+        connected: false,
+        state: "error",
+        error: `Falha ao consultar WhatsApp (HTTP ${response.status})`,
+      };
+    }
+
+    const data = (await response.json()) as {
+      state?: string;
+      instance?: { state?: string };
+    };
+    const rawState = String(data?.instance?.state || data?.state || "close").toLowerCase();
+    return {
+      configured: true,
+      connected: rawState === "open",
+      state: rawState,
+    };
+  } catch {
+    return {
+      configured: true,
+      connected: false,
+      state: "unreachable",
+      error: "Servidor do WhatsApp não respondeu a tempo",
+    };
+  }
+}

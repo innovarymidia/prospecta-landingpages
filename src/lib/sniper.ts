@@ -145,7 +145,7 @@ export function getFollowUpStage(
 }
 
 /**
- * Gera sugestão curta de follow-up para Dia +2 (utilidade) ou Dia +5 (arquivamento da prévia).
+ * Gera sugestão curta de retorno para Dia +2 (utilidade) ou Dia +5 (encerramento da prévia).
  */
 export function buildFollowUpSuggestion(
   companyOrName: string,
@@ -154,10 +154,69 @@ export function buildFollowUpSuggestion(
 ): string {
   const company = companyOrName.trim() || "sua empresa";
   if (stage === "DAY_5") {
-    return `Oi pessoal da ${company}! Como não deixo links de homologação no ar por muito tempo para não pesar no meu servidor de testes, devo arquivar a prévia do catálogo de vocês amanhã. Se quiserem que eu segure mais uns dias para o responsável olhar com calma, é só me dar um oi por aqui!`;
+    return `Oi pessoal da ${company}! Como monto poucos modelos exclusivos por semana e abro espaço para as próximas empresas, costumo tirar o link de demonstração do ar depois de alguns dias. Se quiserem que eu deixe mais um tempo para o responsável avaliar com calma, é só me responder por aqui!`;
   }
   const linkPart = previewLink ? ` (${previewLink})` : "";
   return `Oi! Só passando rapidinho para confirmar se o responsável da ${company} conseguiu abrir aquela prévia que montei${linkPart} sem travar no celular. Deixei os botões já direcionando o pedido de orçamento direto para o WhatsApp de vocês.`;
+}
+
+/**
+ * Extrai um rótulo curto de cidade ou região a partir do endereço ou origem da empresa.
+ */
+export function extractRegionLabel(address?: string | null, source?: string | null): string {
+  const cleanAddr = (address || "").trim();
+  if (cleanAddr) {
+    const cityState = cleanAddr.match(/([A-Za-zÀ-ÿ\s.'-]{2,35})\s*,\s*([A-Z]{2})\b/);
+    if (cityState) {
+      return `${cityState[1].trim()}, ${cityState[2]}`;
+    }
+    const firstChunk = cleanAddr.split(",")[0]?.trim();
+    if (firstChunk && firstChunk.length <= 28) return firstChunk;
+  }
+
+  const cleanSource = (source || "").trim();
+  if (cleanSource.toLowerCase().startsWith("outscraper:")) {
+    const query = cleanSource.slice("outscraper:".length).trim();
+    const parts = query.split(",");
+    if (parts.length >= 2) {
+      return parts.slice(1).join(",").trim().slice(0, 28);
+    }
+  }
+
+  return "Outras regiões";
+}
+
+/**
+ * Formata intervalo relativo legível em português simples.
+ */
+export function formatRelativeTimeBr(dateInput?: string | Date | null, now: Date = new Date()): string {
+  if (!dateInput) return "";
+  const date = dateInput instanceof Date ? dateInput : new Date(dateInput);
+  if (Number.isNaN(date.getTime())) return "";
+
+  const diffMin = Math.max(0, Math.floor((now.getTime() - date.getTime()) / 60_000));
+  if (diffMin < 2) return "agora mesmo";
+  if (diffMin < 60) return `há ${diffMin} min`;
+  const diffHours = Math.floor(diffMin / 60);
+  if (diffHours < 24) return `há ${diffHours}h`;
+  const diffDays = Math.floor(diffHours / 24);
+  return diffDays === 1 ? "há 1 dia" : `há ${diffDays} dias`;
+}
+
+/**
+ * Ordena empresas quentes que já clicaram na prévia, priorizando o clique mais recente.
+ */
+export function sortHotLeads<T extends { previewViews?: number | null; lastViewedAt?: string | Date | null }>(
+  items: T[]
+): T[] {
+  return items
+    .filter(item => (item.previewViews ?? 0) > 0)
+    .slice()
+    .sort((a, b) => {
+      const timeA = a.lastViewedAt ? new Date(a.lastViewedAt).getTime() : 0;
+      const timeB = b.lastViewedAt ? new Date(b.lastViewedAt).getTime() : 0;
+      return timeB - timeA;
+    });
 }
 
 /**

@@ -19,11 +19,13 @@ const schema = z.object({
   notes: z.string().optional(),
 });
 
-export async function GET() {
+export async function GET(req: NextRequest) {
   if (!await authorized()) return unauthorized();
+  const requestedLimit = Number(req.nextUrl.searchParams.get("limit") || 500);
+  const take = Number.isFinite(requestedLimit) ? Math.min(1000, Math.max(50, Math.round(requestedLimit))) : 500;
   const leads = await db.lead.findMany({
     orderBy: { updatedAt: "desc" },
-    take: 200,
+    take,
     include: { messages: { orderBy: { createdAt: "desc" }, take: 1 } },
   });
   return NextResponse.json(leads);

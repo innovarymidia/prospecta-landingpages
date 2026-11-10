@@ -102,7 +102,7 @@ export default function CampaignsPanel({ onNotify }: CampaignsPanelProps) {
         throw Error(
           typeof data.error === "string"
             ? data.error
-            : "Verifique os campos da busca e a chave do provedor Outscraper"
+            : "Verifique os campos da busca e a chave do serviço de busca no Maps"
         );
       }
       setShow(false);
@@ -277,9 +277,21 @@ export default function CampaignsPanel({ onNotify }: CampaignsPanelProps) {
                       </span>
                       <span>·</span>
                       <Clock3 size={13} />
-                      <span>A cada {c.intervalHours}h</span>
+                      <span>
+                        {c.intervalHours >= 168
+                          ? "Semanal"
+                          : c.intervalHours === 24
+                            ? "Diária"
+                            : `A cada ${c.intervalHours}h`}
+                      </span>
                       <span>·</span>
-                      <span>Alvo: {c.websiteTarget === "missing" ? "Sem site" : c.websiteTarget === "present" ? "Com site" : "Qualquer"}</span>
+                      <span>
+                        {c.websiteTarget === "missing"
+                          ? "Apenas sem site"
+                          : c.websiteTarget === "present"
+                            ? "Apenas com site"
+                            : "Todas as empresas"}
+                      </span>
                     </div>
                   </div>
                   <span className={`fd-badge-pill ${c.enabled ? "success" : "warning"}`}>
@@ -383,7 +395,7 @@ export default function CampaignsPanel({ onNotify }: CampaignsPanelProps) {
 
       <div style={{ marginTop: 22, textAlign: "center", fontSize: 13, color: "#7c8798", display: "flex", alignItems: "center", justifyContent: "center", gap: 8 }}>
         <Target size={14} />
-        <span>Provedor Outscraper Google Maps Search · Limite de até 200 resultados por execução.</span>
+        <span>Busca automática no Google Maps com limite de até 200 empresas por execução.</span>
       </div>
 
       {/* Modal Nova Busca */}

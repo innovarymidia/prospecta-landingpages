@@ -3,6 +3,8 @@ import assert from "node:assert/strict";
 import {
   buildFollowUpSuggestion,
   buildTrackedPreviewUrl,
+  extractRegionLabel,
+  formatRelativeTimeBr,
   generatePreviewSlug,
   getFollowUpStage,
   getLeadGoldScore,
@@ -10,6 +12,7 @@ import {
   isBotOrPreviewUserAgent,
   isValidExternalHttpUrl,
   isValidPreviewImage,
+  sortHotLeads,
 } from "./sniper.ts";
 
 test("isValidExternalHttpUrl allows http/https and blocks dangerous schemes", () => {
@@ -74,7 +77,31 @@ test("getFollowUpStage detects DAY_2 and DAY_5 only for SENT leads", () => {
     getFollowUpStage({ status: "REPLIED", initialSentAt: "2026-11-01T10:00:00Z" }, now).due,
     false
   );
-  assert.match(buildFollowUpSuggestion("Locadora Beta", "DAY_5"), /arquivar/i);
+  const day5 = buildFollowUpSuggestion("Locadora Beta", "DAY_5");
+  assert.match(day5, /tirar o link de demonstração do ar/i);
+  assert.doesNotMatch(day5, /homologação|servidor de testes/i);
+});
+
+test("extractRegionLabel derives city and state cleanly without inventing data", () => {
+  assert.equal(extractRegionLabel("Av. Brasil 400, Campinas, SP, 13000"), "Campinas, SP");
+  assert.equal(extractRegionLabel(null, "Outscraper: locadora, Curitiba PR"), "Curitiba PR");
+  assert.equal(extractRegionLabel(null, null), "Outras regiões");
+});
+
+test("formatRelativeTimeBr and sortHotLeads highlight recent preview viewers", () => {
+  const now = new Date("2026-11-10T12:00:00Z");
+  assert.equal(formatRelativeTimeBr("2026-11-10T11:50:00Z", now), "há 10 min");
+  assert.equal(formatRelativeTimeBr("2026-11-10T09:00:00Z", now), "há 3h");
+
+  const sorted = sortHotLeads([
+    { id: "none", previewViews: 0, lastViewedAt: null },
+    { id: "older", previewViews: 3, lastViewedAt: "2026-11-09T10:00:00Z" },
+    { id: "newest", previewViews: 1, lastViewedAt: "2026-11-10T11:55:00Z" },
+  ]);
+  assert.deepEqual(
+    sorted.map(item => item.id),
+    ["newest", "older"]
+  );
 });
 
 test("isBotOrPreviewUserAgent detects WhatsApp link preview crawlers", () => {

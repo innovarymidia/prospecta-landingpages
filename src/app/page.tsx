@@ -2,8 +2,9 @@
 
 import { useEffect, useMemo, useState } from "react";
 import {
+  AlertTriangle,
   Bell,
-  Clock,
+  Building2,
   DollarSign,
   Eye,
   FilePlus,
@@ -17,7 +18,6 @@ import {
   Search,
   ShieldBan,
   Sparkles,
-  Tag,
   UserPlus,
   X,
 } from "lucide-react";
@@ -32,9 +32,12 @@ import LeadConversationPane, {
 import {
   buildFollowUpSuggestion,
   buildTrackedPreviewUrl,
+  extractRegionLabel,
+  formatRelativeTimeBr,
   getFollowUpStage,
   getLeadGoldScore,
   hasRealWebsite,
+  sortHotLeads,
 } from "@/lib/sniper";
 
 type ActiveView = "dashboard" | "pipeline" | "chat" | "campaigns" | "suppressions";
@@ -49,6 +52,16 @@ type SystemStatus = {
   automationEnabled: boolean;
   businessName: string;
   businessOffer: string;
+  whatsapp?: {
+    configured: boolean;
+    connected: boolean;
+    state: string;
+    error?: string;
+  };
+  publicAppUrl?: string;
+  isLocalhostUrl?: boolean;
+  aiConfigured?: boolean;
+  searchConfigured?: boolean;
 };
 
 async function compressScreenshotToDataUrl(file: File): Promise<string> {
@@ -68,7 +81,9 @@ async function compressScreenshotToDataUrl(file: File): Promise<string> {
 export default function Home() {
   const [activeView, setActiveView] = useState<ActiveView>("dashboard");
   const [stageFilter, setStageFilter] = useState<string>("ALL");
-  const [chatFilter, setChatFilter] = useState<"ALL" | "REPLIED" | "SENT">("ALL");
+  const [chatFilter, setChatFilter] = useState<"ALL" | "WAIT_HUMAN" | "REPLIED" | "SENT">("ALL");
+  const [priorityTab, setPriorityTab] = useState<"HOT" | "HUMAN" | "FOLLOWUP">("HOT");
+  const [visibleCount, setVisibleCount] = useState<number>(25);
   const [leads, setLeads] = useState<Lead[]>([]);
   const [suppressions, setSuppressions] = useState<Suppression[]>([]);
   const [query, setQuery] = useState("");
@@ -113,6 +128,7 @@ export default function Home() {
   function navigateView(view: ActiveView, nextStage?: string) {
     setActiveView(view);
     if (nextStage !== undefined) setStageFilter(nextStage);
+    setVisibleCount(25);
     if (view !== "chat") setSelectedLeadId(null);
 
     if (typeof window !== "undefined") {
@@ -180,14 +196,17 @@ export default function Home() {
     loadSuppressions();
     const timer = setInterval(() => {
       loadLeads();
-    }, 20000);
+      loadStatus();
+    }, 30000);
     return () => clearInterval(timer);
   }, []);
 
   useEffect(() => {
     if (activeView === "chat" && !selectedLeadId && leads.length > 0) {
       const preferred =
-        leads.find(l => ["REPLIED", "QUALIFIED", "MEETING", "WON"].includes(l.status)) || leads[0];
+        leads.find(l => Boolean(l.aiPausedAt) && !["WON", "LOST", "OPTED_OUT", "BLOCKED"].includes(l.status)) ||
+        leads.find(l => ["REPLIED", "QUALIFIED", "MEETING", "WON"].includes(l.status)) ||
+        leads[0];
       if (preferred) openConversation(preferred.id);
     }
   }, [activeView, leads, selectedLeadId]);
@@ -518,22 +537,67 @@ export default function Home() {
     }
   }
 
-  // Métricas Reais
+  // Métricas 100% Reais do Banco
   const totalLeads = leads.length;
+  const noRealSiteCount = leads.filter(l => !hasRealWebsite(l.website)).length;
   const goldCount = leads.filter(l => getLeadGoldScore(l).isGold).length;
+  const readyWithoutPreviewCount = leads.filter(
+    l => !l.previewUrl && ["NEW", "READY", "BUILDING"].includes(l.status)
+  ).length;
+  const readyToSendCount = leads.filter(
+    l => Boolean(l.previewUrl) && !l.initialSentAt && ["NEW", "READY", "BUILDING", "DEMO_READY"].includes(l.status)
+  ).length;
   const demoCount = leads.filter(l => l.status === "BUILDING" || l.status === "DEMO_READY" || Boolean(l.previewUrl)).length;
-  const readyCount = leads.filter(l => ["READY", "NEW", "BUILDING", "DEMO_READY"].includes(l.status)).length;
-  const sentCount = leads.filter(l => l.initialSentAt || l.status === "SENT").length;
+  const sentCount = leads.filter(l => Boolean(l.initialSentAt) || l.status === "SENT").length;
   const followUpCount = leads.filter(l => getFollowUpStage(l).due !== false).length;
   const totalPreviewViews = leads.reduce((sum, l) => sum + (l.previewViews || 0), 0);
   const viewedLeadsCount = leads.filter(l => (l.previewViews || 0) > 0).length;
   const repliedCount = leads.filter(l => ["REPLIED", "QUALIFIED", "MEETING", "WON"].includes(l.status)).length;
   const wonCount = leads.filter(l => l.status === "WON").length;
 
-  const goldPct = totalLeads > 0 ? Math.round((goldCount / totalLeads) * 100) : 0;
-  const viewsPct = sentCount > 0 ? Math.min(100, Math.round((viewedLeadsCount / sentCount) * 100)) : 0;
-  const metaPct = Math.min(100, Math.round((wonCount / 10) * 100));
+  const goldPct = totalLeads > 0 ? Math.round((noRealSiteCount / totalLeads) * 100) : 0;
   const monthlyRevenue = wonCount * 1200;
+
+  const hotLeads = useMemo(() => sortHotLeads(leads), [leads]);
+  const waitingHumanLeads = useMemo(
+    () =>
+      leads.filter(
+        l =>
+          (Boolean(l.aiPausedAt) || l.status === "REPLIED") &&
+          !["WON", "LOST", "OPTED_OUT", "BLOCKED"].includes(l.status)
+      ),
+    [leads]
+  );
+  const followUpLeads = useMemo(
+    () => leads.filter(l => getFollowUpStage(l).due !== false),
+    [leads]
+  );
+
+  const realCities = useMemo(() => {
+    const counts = new Map<string, number>();
+    for (const l of leads) {
+      const label = extractRegionLabel(l.address, l.source);
+      counts.set(label, (counts.get(label) || 0) + 1);
+    }
+    return Array.from(counts.entries())
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 4)
+      .map(([label, count]) => ({
+        label,
+        count,
+        pct: totalLeads > 0 ? Math.round((count / totalLeads) * 100) : 0,
+      }));
+  }, [leads, totalLeads]);
+
+  const funnelSteps = [
+    { label: "Empresas cadastradas", count: totalLeads, color: "#5f76e8" },
+    { label: "Sem site próprio", count: noRealSiteCount, color: "#01caf1" },
+    { label: "Com prévia pronta", count: demoCount, color: "#5f76e8" },
+    { label: "Abordagem enviada", count: sentCount, color: "#fdc16a" },
+    { label: "Clicaram no link", count: viewedLeadsCount, color: "#22ca80" },
+    { label: "Responderam", count: repliedCount, color: "#22ca80" },
+    { label: "Vendas fechadas", count: wonCount, color: "#1c2d41" },
+  ];
 
   const filtered = useMemo(() => {
     return leads.filter(l => {
@@ -554,15 +618,28 @@ export default function Home() {
   }, [leads, query, stageFilter]);
 
   const chatContacts = useMemo(() => {
-    return leads.filter(l => {
-      const matchesQuery = `${l.name} ${l.company || ""} ${l.phone} ${l.category || ""} ${l.address || ""}`
-        .toLowerCase()
-        .includes(query.toLowerCase());
-      if (!matchesQuery) return false;
-      if (chatFilter === "REPLIED") return ["REPLIED", "QUALIFIED", "MEETING", "WON"].includes(l.status);
-      if (chatFilter === "SENT") return l.status === "SENT" || Boolean(l.initialSentAt);
-      return true;
-    });
+    return leads
+      .filter(l => {
+        const matchesQuery = `${l.name} ${l.company || ""} ${l.phone} ${l.category || ""} ${l.address || ""}`
+          .toLowerCase()
+          .includes(query.toLowerCase());
+        if (!matchesQuery) return false;
+        if (chatFilter === "WAIT_HUMAN") {
+          return (
+            (Boolean(l.aiPausedAt) || l.status === "REPLIED") &&
+            !["WON", "LOST", "OPTED_OUT", "BLOCKED"].includes(l.status)
+          );
+        }
+        if (chatFilter === "REPLIED") return ["REPLIED", "QUALIFIED", "MEETING", "WON"].includes(l.status);
+        if (chatFilter === "SENT") return l.status === "SENT" || Boolean(l.initialSentAt);
+        return true;
+      })
+      .slice()
+      .sort((a, b) => {
+        const tA = new Date(a.lastMessageAt || a.lastViewedAt || a.createdAt).getTime();
+        const tB = new Date(b.lastMessageAt || b.lastViewedAt || b.createdAt).getTime();
+        return tB - tA;
+      });
   }, [leads, query, chatFilter]);
 
   const conversationPaneProps = {
@@ -624,7 +701,7 @@ export default function Home() {
         </div>
       )}
 
-      {/* Topbar Header (Exact FreeDash 80px Fixed Header) */}
+      {/* Topbar Header */}
       <header className="fd-topbar">
         <div className="fd-navbar-header">
           <a
@@ -652,42 +729,45 @@ export default function Home() {
         </div>
 
         <div className="fd-navbar-collapse">
-          <div style={{ display: "flex", alignItems: "center", gap: 18 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
             <button
               className="fd-btn"
               style={{ border: 0, background: "transparent", padding: "0 6px", position: "relative" }}
-              onClick={() => navigateView("pipeline", followUpCount > 0 ? "FOLLOWUP" : "ALL")}
-              title="Pendências de Follow up e Views"
+              onClick={() => {
+                setPriorityTab(waitingHumanLeads.length > 0 ? "HUMAN" : hotLeads.length > 0 ? "HOT" : "FOLLOWUP");
+                navigateView("dashboard", "ALL");
+              }}
+              title="Ver prioridades de hoje"
             >
               <Bell size={20} style={{ color: "#7c8798" }} />
               <span
                 className="fd-badge-pill primary"
                 style={{ position: "absolute", top: -2, right: -4, fontSize: 10, padding: "2px 6px", lineHeight: 1 }}
               >
-                {followUpCount + viewedLeadsCount}
+                {hotLeads.length + waitingHumanLeads.length + followUpCount}
               </span>
             </button>
 
-            <select
-              className="fd-pill-select"
-              value={stageFilter}
-              onChange={e => navigateView("pipeline", e.target.value)}
-              aria-label="Filtro rápido de etapa"
-            >
-              <option value="ALL">Todas as Etapas</option>
-              <option value="GOLD">Leads Ouro (Sem Site)</option>
-              <option value="DEMO">Prévias Prontas</option>
-              <option value="SENT">Prévias Enviadas</option>
-              <option value="FOLLOWUP">Follow up Pendente</option>
-              <option value="REPLIED">Em Negociação</option>
-              <option value="WON">Clientes Fechados</option>
-            </select>
-
             <span
-              className={`fd-badge-pill ${systemStatus?.automationEnabled ? "success" : "warning"}`}
+              className={`fd-badge-pill ${
+                !systemStatus
+                  ? "warning"
+                  : !systemStatus.automationEnabled
+                    ? "warning"
+                    : systemStatus.whatsapp?.connected
+                      ? "success"
+                      : "danger"
+              }`}
               style={{ fontSize: 12 }}
+              title={systemStatus?.whatsapp?.error || "Estado real da conexão com o WhatsApp"}
             >
-              {systemStatus?.automationEnabled ? "WhatsApp Conectado" : "Envios Pausados"}
+              {!systemStatus
+                ? "Verificando WhatsApp..."
+                : !systemStatus.automationEnabled
+                  ? "Envios Pausados no Servidor"
+                  : systemStatus.whatsapp?.connected
+                    ? "WhatsApp Conectado"
+                    : "WhatsApp Desconectado"}
             </span>
           </div>
 
@@ -698,7 +778,10 @@ export default function Home() {
                 type="search"
                 placeholder="Pesquisar empresa"
                 value={query}
-                onChange={e => setQuery(e.target.value)}
+                onChange={e => {
+                  setQuery(e.target.value);
+                  setVisibleCount(25);
+                }}
               />
               <Search
                 size={18}
@@ -707,10 +790,14 @@ export default function Home() {
             </div>
 
             <button
-              onClick={() => loadLeads()}
+              onClick={() => {
+                loadLeads();
+                loadStatus();
+                notify("Dados atualizados.");
+              }}
               className="fd-btn"
               style={{ border: 0, background: "transparent", padding: 6 }}
-              title="Atualizar dados"
+              title="Atualizar empresas e conexão WhatsApp"
             >
               <RefreshCw size={18} style={{ color: "#7c8798" }} />
             </button>
@@ -732,7 +819,7 @@ export default function Home() {
         </div>
       </header>
 
-      {/* Left Sidebar (FreeDash Skin6 with Signature Purple Gradient Selected Pill) */}
+      {/* Left Sidebar (5 Menus Simples e Objetivos) */}
       <aside className="fd-left-sidebar">
         <nav className="fd-sidebar-nav">
           <ul className="fd-sidebar-ul">
@@ -743,48 +830,24 @@ export default function Home() {
                 onClick={() => navigateView("dashboard", "ALL")}
               >
                 <HomeIcon />
-                <span className="fd-hide-menu">Dashboard</span>
+                <span className="fd-hide-menu">Início</span>
               </button>
             </li>
 
             <li className="fd-list-divider" />
             <li className="fd-nav-small-cap">
-              <span className="fd-hide-menu">Prospecção</span>
+              <span className="fd-hide-menu">Atendimento</span>
             </li>
 
-            <li className={`fd-sidebar-item ${activeView === "pipeline" && stageFilter === "GOLD" ? "selected" : ""}`}>
+            <li className={`fd-sidebar-item ${activeView === "pipeline" ? "selected" : ""}`}>
               <button
                 type="button"
                 className="fd-sidebar-link"
-                onClick={() => navigateView("pipeline", "GOLD")}
+                onClick={() => navigateView("pipeline", stageFilter)}
               >
-                <Tag />
-                <span className="fd-hide-menu">Leads Ouro</span>
-                <span className="fd-nav-pill-count">{goldCount}</span>
-              </button>
-            </li>
-
-            <li className={`fd-sidebar-item ${activeView === "pipeline" && stageFilter === "DEMO" ? "selected" : ""}`}>
-              <button
-                type="button"
-                className="fd-sidebar-link"
-                onClick={() => navigateView("pipeline", "DEMO")}
-              >
-                <Eye />
-                <span className="fd-hide-menu">Prévias Prontas</span>
-                <span className="fd-nav-pill-count">{demoCount}</span>
-              </button>
-            </li>
-
-            <li className={`fd-sidebar-item ${activeView === "pipeline" && stageFilter === "FOLLOWUP" ? "selected" : ""}`}>
-              <button
-                type="button"
-                className="fd-sidebar-link"
-                onClick={() => navigateView("pipeline", "FOLLOWUP")}
-              >
-                <Clock />
-                <span className="fd-hide-menu">Follow up 2d e 5d</span>
-                {followUpCount > 0 && <span className="fd-nav-pill-count">{followUpCount}</span>}
+                <Building2 />
+                <span className="fd-hide-menu">Empresas</span>
+                <span className="fd-nav-pill-count">{totalLeads}</span>
               </button>
             </li>
 
@@ -795,8 +858,12 @@ export default function Home() {
                 onClick={() => navigateView("chat")}
               >
                 <MessageSquare />
-                <span className="fd-hide-menu">Chat WhatsApp</span>
-                <span className="fd-nav-pill-count">{repliedCount}</span>
+                <span className="fd-hide-menu">Conversas</span>
+                {(waitingHumanLeads.length > 0 || repliedCount > 0) && (
+                  <span className="fd-nav-pill-count">
+                    {waitingHumanLeads.length > 0 ? waitingHumanLeads.length : repliedCount}
+                  </span>
+                )}
               </button>
             </li>
 
@@ -812,7 +879,7 @@ export default function Home() {
                 onClick={() => navigateView("campaigns")}
               >
                 <MapPin />
-                <span className="fd-hide-menu">Buscas no Maps</span>
+                <span className="fd-hide-menu">Buscar no Maps</span>
               </button>
             </li>
 
@@ -823,14 +890,14 @@ export default function Home() {
                 onClick={() => navigateView("suppressions")}
               >
                 <ShieldBan />
-                <span className="fd-hide-menu">Supressão</span>
+                <span className="fd-hide-menu">Bloqueados</span>
                 <span className="fd-nav-pill-count">{suppressions.length}</span>
               </button>
             </li>
 
             <li className="fd-list-divider" />
             <li className="fd-nav-small-cap">
-              <span className="fd-hide-menu">Sistema</span>
+              <span className="fd-hide-menu">Conta</span>
             </li>
 
             <li className="fd-sidebar-item">
@@ -857,27 +924,21 @@ export default function Home() {
           <div>
             <h3 className="fd-page-title">
               {activeView === "dashboard"
-                ? "Bom dia, Operação Locadoras B2B!"
+                ? "Resumo de Hoje"
                 : activeView === "pipeline"
-                  ? stageFilter === "GOLD"
-                    ? "Leads Ouro sem Site"
-                    : stageFilter === "DEMO"
-                      ? "Prévias Prontas"
-                      : stageFilter === "FOLLOWUP"
-                        ? "Follow up 2d e 5d"
-                        : "Pipeline de Prospecção"
+                  ? "Lista de Empresas"
                   : activeView === "chat"
-                    ? "Chat WhatsApp"
+                    ? "Conversas no WhatsApp"
                     : activeView === "campaigns"
-                      ? "Buscas no Maps e Campanhas"
-                      : "Lista de Supressão"}
+                      ? "Buscar Empresas no Maps"
+                      : "Contatos Bloqueados"}
             </h3>
             <div className="fd-breadcrumb">
               <span>
                 {activeView === "dashboard"
-                  ? "Dashboard"
+                  ? "Início"
                   : activeView === "pipeline" || activeView === "chat"
-                    ? "Prospecção"
+                    ? "Atendimento"
                     : "Captação"}
               </span>
               <span>/</span>
@@ -885,28 +946,20 @@ export default function Home() {
                 {activeView === "dashboard"
                   ? "Visão Geral"
                   : activeView === "pipeline"
-                    ? "Pipeline"
+                    ? "Empresas"
                     : activeView === "chat"
-                      ? "Atendimento WhatsApp"
+                      ? "Conversas"
                       : activeView === "campaigns"
-                        ? "Campanhas"
-                        : "Bloqueios"}
+                        ? "Google Maps"
+                        : "Bloqueados"}
               </span>
             </div>
           </div>
 
           <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-            <button
-              type="button"
-              onClick={() => navigateView("campaigns")}
-              className={`fd-btn fd-btn-rounded ${activeView === "campaigns" ? "fd-btn-primary" : ""}`}
-            >
-              <MapPin size={15} />
-              <span>Buscas Maps</span>
-            </button>
             <button className="fd-btn fd-btn-primary fd-btn-rounded" onClick={() => setShowAddModal(true)}>
               <Plus size={15} />
-              <span>Novo Lead</span>
+              <span>Nova Empresa</span>
             </button>
           </div>
         </div>
@@ -915,336 +968,272 @@ export default function Home() {
         <div className="fd-container-fluid">
           {activeView === "dashboard" && (
             <>
-              {/* Row 1: FreeDash 4 KPI Group */}
+              {/* Alertas Reais de Prontidão para Teste */}
+              {systemStatus && (!systemStatus.whatsapp?.connected || !systemStatus.automationEnabled || systemStatus.isLocalhostUrl) && (
+                <div
+                  className="fd-card"
+                  style={{
+                    borderLeft: `4px solid ${!systemStatus.whatsapp?.connected || !systemStatus.automationEnabled ? "#ff4f70" : "#fdc16a"}`,
+                    padding: "14px 20px",
+                    marginBottom: 22,
+                    display: "flex",
+                    flexDirection: "column",
+                    gap: 6,
+                  }}
+                >
+                  <div style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 14, fontWeight: 500, color: "#1c2d41" }}>
+                    <AlertTriangle size={17} style={{ color: !systemStatus.whatsapp?.connected ? "#ff4f70" : "#fb8c00" }} />
+                    <span>Avisos antes de enviar mensagens reais</span>
+                  </div>
+                  {!systemStatus.whatsapp?.connected && (
+                    <div style={{ fontSize: 13, color: "#4f5467" }}>
+                      WhatsApp desconectado ({systemStatus.whatsapp?.error || `estado: ${systemStatus.whatsapp?.state}`}). Conecte o celular na instância antes de disparar.
+                    </div>
+                  )}
+                  {!systemStatus.automationEnabled && (
+                    <div style={{ fontSize: 13, color: "#4f5467" }}>
+                      Os envios no servidor estão pausados (AUTOMATION_ENABLED diferente de true).
+                    </div>
+                  )}
+                  {systemStatus.isLocalhostUrl && (
+                    <div style={{ fontSize: 13, color: "#4f5467" }}>
+                      Você está acessando em endereço local (localhost). Para o cliente abrir o link rastreado da prévia no celular, acesse pelo domínio público publicado.
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Row 1: 4 KPIs 100% Reais e Clicáveis */}
               <div className="fd-kpi-row">
-                <div className="fd-kpi-cell">
+                <div
+                  className="fd-kpi-cell"
+                  style={{ cursor: "pointer" }}
+                  onClick={() => navigateView("pipeline", "GOLD")}
+                  title="Ver empresas sem site para criar prévia"
+                >
                   <div>
                     <div style={{ display: "inline-flex", alignItems: "center", gap: 8 }}>
-                      <h2 className="fd-kpi-value">{goldCount}</h2>
-                      <span className="fd-badge-pill primary">{goldPct}%</span>
+                      <h2 className="fd-kpi-value">{readyWithoutPreviewCount}</h2>
+                      <span className="fd-badge-pill primary">{goldPct}% sem site</span>
                     </div>
-                    <h6 className="fd-kpi-label">Leads Ouro sem site</h6>
+                    <h6 className="fd-kpi-label">Fazer Prévia (Ouro: {goldCount})</h6>
                   </div>
                   <UserPlus size={26} style={{ color: "#b8c3d5" }} />
                 </div>
 
-                <div className="fd-kpi-cell">
+                <div
+                  className="fd-kpi-cell"
+                  style={{ cursor: "pointer" }}
+                  onClick={() => navigateView("pipeline", "DEMO")}
+                  title="Ver empresas com prévia pronta para enviar"
+                >
+                  <div>
+                    <div style={{ display: "inline-flex", alignItems: "center", gap: 8 }}>
+                      <h2 className="fd-kpi-value">{readyToSendCount}</h2>
+                      <span className="fd-badge-pill warning">{sentCount} enviadas</span>
+                    </div>
+                    <h6 className="fd-kpi-label">Prévias Prontas para Enviar</h6>
+                  </div>
+                  <FilePlus size={26} style={{ color: "#b8c3d5" }} />
+                </div>
+
+                <div
+                  className="fd-kpi-cell"
+                  style={{ cursor: "pointer" }}
+                  onClick={() => setPriorityTab("HOT")}
+                  title="Ver quem abriu a prévia"
+                >
+                  <div>
+                    <div style={{ display: "inline-flex", alignItems: "center", gap: 8 }}>
+                      <h2 className="fd-kpi-value">{viewedLeadsCount}</h2>
+                      <span className="fd-badge-pill success">{totalPreviewViews} cliques</span>
+                    </div>
+                    <h6 className="fd-kpi-label">Empresas que Abriram o Link</h6>
+                  </div>
+                  <Globe size={26} style={{ color: "#b8c3d5" }} />
+                </div>
+
+                <div
+                  className="fd-kpi-cell"
+                  style={{ cursor: "pointer" }}
+                  onClick={() => navigateView("pipeline", "WON")}
+                  title="Ver vendas fechadas"
+                >
                   <div>
                     <h2 className="fd-kpi-value">
                       <sup className="fd-sup-currency">R$</sup>
                       {monthlyRevenue.toLocaleString("pt-BR")}
                     </h2>
-                    <h6 className="fd-kpi-label">Faturamento do Mês (Meta 12k)</h6>
+                    <h6 className="fd-kpi-label">
+                      Faturamento Real ({wonCount} {wonCount === 1 ? "venda" : "vendas"})
+                    </h6>
                   </div>
                   <DollarSign size={26} style={{ color: "#b8c3d5" }} />
                 </div>
-
-                <div className="fd-kpi-cell">
-                  <div>
-                    <div style={{ display: "inline-flex", alignItems: "center", gap: 8 }}>
-                      <h2 className="fd-kpi-value">{demoCount}</h2>
-                      <span className="fd-badge-pill danger">{sentCount} enviadas</span>
-                    </div>
-                    <h6 className="fd-kpi-label">Prévias Prontas</h6>
-                  </div>
-                  <FilePlus size={26} style={{ color: "#b8c3d5" }} />
-                </div>
-
-                <div className="fd-kpi-cell">
-                  <div>
-                    <h2 className="fd-kpi-value">{totalPreviewViews}</h2>
-                    <h6 className="fd-kpi-label">Cliques Reais em Prévias</h6>
-                  </div>
-                  <Globe size={26} style={{ color: "#b8c3d5" }} />
-                </div>
               </div>
 
-              {/* Row 2: 3 Cards Sales Charts Section (Donut + Bar Chart + Progress Bars) */}
-              <div className="fd-charts-3col">
-                {/* Card 1: Total do Funil (C3 Donut Style) */}
-                <div className="fd-card">
-                  <div className="fd-card-body">
-                    <h4 className="fd-card-title">Total do Funil</h4>
-
-                    <div style={{ display: "flex", justifyContent: "center", margin: "24px 0 28px" }}>
-                      <div style={{ position: "relative", width: 170, height: 170 }}>
-                        <svg width="170" height="170" viewBox="0 0 170 170">
-                          <circle cx="85" cy="85" r="64" fill="none" stroke="#edf2f6" strokeWidth="18" />
-                          <circle
-                            cx="85"
-                            cy="85"
-                            r="64"
-                            fill="none"
-                            stroke="#5f76e8"
-                            strokeWidth="18"
-                            strokeDasharray="170 402"
-                            strokeDashoffset="0"
-                            transform="rotate(-90 85 85)"
-                          />
-                          <circle
-                            cx="85"
-                            cy="85"
-                            r="64"
-                            fill="none"
-                            stroke="#ff4f70"
-                            strokeWidth="18"
-                            strokeDasharray="110 402"
-                            strokeDashoffset="-170"
-                            transform="rotate(-90 85 85)"
-                          />
-                          <circle
-                            cx="85"
-                            cy="85"
-                            r="64"
-                            fill="none"
-                            stroke="#01caf1"
-                            strokeWidth="18"
-                            strokeDasharray="75 402"
-                            strokeDashoffset="-280"
-                            transform="rotate(-90 85 85)"
-                          />
-                        </svg>
-                        <div
-                          style={{
-                            position: "absolute",
-                            inset: 0,
-                            display: "flex",
-                            flexDirection: "column",
-                            alignItems: "center",
-                            justifyContent: "center",
-                          }}
-                        >
-                          <span style={{ fontSize: 13, color: "#7c8798", fontWeight: 400 }}>Base Total</span>
-                          <strong style={{ fontSize: 24, color: "#1c2d41", fontWeight: 500 }}>{totalLeads}</strong>
-                        </div>
-                      </div>
-                    </div>
-
-                    <ul style={{ listStyle: "none", padding: 0, margin: 0, display: "flex", flexDirection: "column", gap: 14, fontSize: 14 }}>
-                      <li style={{ display: "flex", alignItems: "center" }}>
-                        <span style={{ width: 9, height: 9, borderRadius: "50%", background: "#5f76e8", marginRight: 10 }} />
-                        <span>Prévias Prontas</span>
-                        <span style={{ marginLeft: "auto", color: "#1c2d41", fontWeight: 500 }}>{demoCount}</span>
-                      </li>
-                      <li style={{ display: "flex", alignItems: "center" }}>
-                        <span style={{ width: 9, height: 9, borderRadius: "50%", background: "#ff4f70", marginRight: 10 }} />
-                        <span>Aguardando Follow up</span>
-                        <span style={{ marginLeft: "auto", color: "#1c2d41", fontWeight: 500 }}>{followUpCount}</span>
-                      </li>
-                      <li style={{ display: "flex", alignItems: "center" }}>
-                        <span style={{ width: 9, height: 9, borderRadius: "50%", background: "#01caf1", marginRight: 10 }} />
-                        <span>Em Negociação</span>
-                        <span style={{ marginLeft: "auto", color: "#1c2d41", fontWeight: 500 }}>{repliedCount}</span>
-                      </li>
-                    </ul>
-                  </div>
-                </div>
-
-                {/* Card 2: Meta e Produtividade (Chartist Bar Style) */}
-                <div className="fd-card">
-                  <div className="fd-card-body" style={{ display: "flex", flexDirection: "column", height: "100%" }}>
-                    <h4 className="fd-card-title">Meta de Faturamento</h4>
-
-                    <div style={{ flex: 1, display: "flex", flexDirection: "column", justifyContent: "flex-end", paddingTop: 18 }}>
-                      <div style={{ display: "flex", alignItems: "flex-end", justifyContent: "space-between", height: 220, borderBottom: "1px dashed #edf2f9", paddingBottom: 8, gap: 14 }}>
-                        {[
-                          { label: "Ouro", val: Math.max(15, Math.min(100, goldCount * 10 || 28)), raw: goldCount },
-                          { label: "Prévia", val: Math.max(15, Math.min(100, demoCount * 15 || 42)), raw: demoCount },
-                          { label: "Envios", val: Math.max(15, Math.min(100, sentCount * 12 || 35)), raw: sentCount },
-                          { label: "Views", val: Math.max(15, Math.min(100, totalPreviewViews * 12 || 68)), raw: totalPreviewViews },
-                          { label: "Chat", val: Math.max(15, Math.min(100, repliedCount * 15 || 52)), raw: repliedCount },
-                          { label: "Meta", val: Math.max(15, metaPct || 85), raw: `${wonCount}/10` },
-                        ].map(bar => (
-                          <div key={bar.label} style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", height: "100%", justifyContent: "flex-end" }}>
-                            <span style={{ fontSize: 11, color: "#7c8798", marginBottom: 6 }}>{bar.raw}</span>
-                            <div
-                              style={{
-                                width: 12,
-                                height: `${bar.val}%`,
-                                background: "#5f76e8",
-                                borderRadius: 2,
-                                transition: "height 0.3s ease",
-                              }}
-                            />
-                          </div>
-                        ))}
-                      </div>
-                      <div style={{ display: "flex", justifyContent: "space-between", paddingTop: 8, fontSize: 12, color: "#b8c3d5" }}>
-                        <span>Ouro</span><span>Prévia</span><span>Envios</span><span>Views</span><span>Chat</span><span>Meta</span>
-                      </div>
-                    </div>
-
-                    <div style={{ textAlign: "center", marginTop: 22, fontSize: 13, fontStyle: "italic", color: "#7c8798" }}>
-                      Progresso para 10 sites no mês ({metaPct}%)
-                    </div>
-                  </div>
-                </div>
-
-                {/* Card 3: Distribuição por Regiões e Etapas (Exact Progress Bars) */}
-                <div className="fd-card">
-                  <div className="fd-card-body">
-                    <h4 className="fd-card-title" style={{ marginBottom: 20 }}>Prospecção por Região</h4>
-
-                    <div style={{ background: "#f9fbfd", borderRadius: 4, padding: "18px 16px", marginBottom: 26, textAlign: "center", border: "1px solid #edf2f9" }}>
-                      <div style={{ fontSize: 12, color: "#7c8798", textTransform: "uppercase", letterSpacing: "0.05em" }}>
-                        Foco Ativo Nacional
-                      </div>
-                      <div style={{ fontSize: 20, fontWeight: 500, color: "#1c2d41", marginTop: 4 }}>
-                        5 Praças de Locadoras B2B
-                      </div>
-                      <div style={{ fontSize: 12, color: "#5f76e8", marginTop: 4 }}>
-                        Taxa de abertura atual: {viewsPct}%
-                      </div>
-                    </div>
-
-                    <div style={{ display: "flex", flexDirection: "column", gap: 18 }}>
-                      {[
-                        { label: "Campinas SP", pct: 34, color: "#5f76e8" },
-                        { label: "Grande SP", pct: 28, color: "#ff4f70" },
-                        { label: "Curitiba PR", pct: 20, color: "#01caf1" },
-                        { label: "Belo Horizonte", pct: 18, color: "#22ca80" },
-                      ].map(region => (
-                        <div key={region.label} style={{ display: "grid", gridTemplateColumns: "105px 1fr 40px", alignItems: "center", gap: 10 }}>
-                          <span style={{ fontSize: 14, color: "#7c8798", textAlign: "right" }}>{region.label}</span>
-                          <div className="fd-progress">
-                            <div className="fd-progress-bar" style={{ width: `${region.pct * 2.5}%`, background: region.color }} />
-                          </div>
-                          <span style={{ fontSize: 14, color: "#1c2d41", fontWeight: 500, textAlign: "right" }}>{region.pct}%</span>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              {/* Row 3: Earning Statistics Area Chart (8 cols) + Recent Activity Timeline (4 cols) */}
+              {/* Row 2: Prioridades de Hoje (2/3) + Funil Real e Cidades (1/3) */}
               <div className="fd-charts-2col">
                 <div className="fd-card">
                   <div className="fd-card-body">
-                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
-                      <h4 className="fd-card-title" style={{ margin: 0 }}>Evolução de Cliques e Conversas</h4>
-                      <span className="fd-badge-pill primary">{viewedLeadsCount} empresas abriram</span>
-                    </div>
-
-                    <div style={{ width: "100%", height: 260, paddingTop: 10 }}>
-                      <svg viewBox="0 0 640 220" style={{ width: "100%", height: "100%", overflow: "visible" }}>
-                        <defs>
-                          <linearGradient id="fdAreaGradient" x1="0" y1="1" x2="0" y2="0">
-                            <stop offset="0%" stopColor="rgba(255, 255, 255, 0)" />
-                            <stop offset="100%" stopColor="rgba(95, 118, 232, 0.28)" />
-                          </linearGradient>
-                        </defs>
-
-                        {/* Grid lines */}
-                        {[30, 80, 130, 180].map((y, idx) => (
-                          <g key={y}>
-                            <line x1="36" y1={y} x2="620" y2={y} stroke="#edf2f9" strokeDasharray="3 3" />
-                            <text x="6" y={y + 4} fill="#b8c3d5" fontSize="11">
-                              {[25, 18, 10, 4][idx]}
-                            </text>
-                          </g>
-                        ))}
-
-                        {/* Smooth area curve */}
-                        <path
-                          d="M 40 165 C 100 165, 110 155, 140 150 C 185 140, 200 110, 245 110 C 290 110, 310 65, 355 65 C 400 65, 420 120, 465 115 C 510 110, 530 45, 575 45 L 615 105 L 615 190 L 40 190 Z"
-                          fill="url(#fdAreaGradient)"
-                        />
-                        <path
-                          d="M 40 165 C 100 165, 110 155, 140 150 C 185 140, 200 110, 245 110 C 290 110, 310 65, 355 65 C 400 65, 420 120, 465 115 C 510 110, 530 45, 575 45 L 615 105"
-                          fill="none"
-                          stroke="#5f76e8"
-                          strokeWidth="3"
-                        />
-
+                    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 12, marginBottom: 18 }}>
+                      <h4 className="fd-card-title" style={{ margin: 0 }}>Prioridades de Hoje</h4>
+                      <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
                         {[
-                          [40, 165],
-                          [140, 150],
-                          [245, 110],
-                          [355, 65],
-                          [465, 115],
-                          [575, 45],
-                          [615, 105],
-                        ].map(([cx, cy], i) => (
-                          <circle key={i} cx={cx} cy={cy} r="5" fill="#ffffff" stroke="#5f76e8" strokeWidth="3" />
+                          { id: "HOT", label: `Abriram o link (${hotLeads.length})` },
+                          { id: "HUMAN", label: `Sua vez (${waitingHumanLeads.length})` },
+                          { id: "FOLLOWUP", label: `Retorno 2d e 5d (${followUpLeads.length})` },
+                        ].map(tab => (
+                          <button
+                            key={tab.id}
+                            type="button"
+                            onClick={() => setPriorityTab(tab.id as "HOT" | "HUMAN" | "FOLLOWUP")}
+                            className={`fd-btn fd-btn-sm fd-btn-rounded ${priorityTab === tab.id ? "fd-btn-primary" : ""}`}
+                          >
+                            {tab.label}
+                          </button>
                         ))}
-
-                        {["Seg", "Ter", "Qua", "Qui", "Sex", "Sáb", "Dom"].map((d, i) => (
-                          <text key={d} x={40 + i * 95} y="210" fill="#b8c3d5" fontSize="12" textAnchor="middle">
-                            {d}
-                          </text>
-                        ))}
-                      </svg>
+                      </div>
                     </div>
 
-                    <div style={{ textAlign: "center", fontSize: 13, fontStyle: "italic", color: "#7c8798", marginTop: 8 }}>
-                      Resultados acompanhados no mês atual
-                    </div>
+                    {(() => {
+                      const activeList =
+                        priorityTab === "HOT"
+                          ? hotLeads
+                          : priorityTab === "HUMAN"
+                            ? waitingHumanLeads
+                            : followUpLeads;
+
+                      if (activeList.length === 0) {
+                        return (
+                          <div style={{ padding: "36px 20px", textAlign: "center", background: "#f9fbfd", borderRadius: 4, border: "1px dashed #dee2e6", color: "#7c8798", fontSize: 14 }}>
+                            {priorityTab === "HOT"
+                              ? "Nenhuma empresa abriu o link da prévia ainda. Assim que alguém clicar, aparecerá aqui em tempo real."
+                              : priorityTab === "HUMAN"
+                                ? "Nenhuma conversa aguardando resposta humana no momento."
+                                : "Nenhuma empresa precisando de retorno de 2 ou 5 dias hoje."}
+                          </div>
+                        );
+                      }
+
+                      return (
+                        <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                          {activeList.slice(0, 6).map((item, idx) => {
+                            const displayName = item.company || item.name;
+                            const fu = getFollowUpStage(item);
+                            const lastClick = formatRelativeTimeBr(item.lastViewedAt);
+                            const lastMsgTime = formatRelativeTimeBr(item.lastMessageAt);
+                            return (
+                              <div
+                                key={item.id}
+                                onClick={() => openConversation(item.id)}
+                                style={{
+                                  display: "flex",
+                                  alignItems: "center",
+                                  justifyContent: "space-between",
+                                  gap: 12,
+                                  padding: "12px 14px",
+                                  borderRadius: 4,
+                                  border: "1px solid #edf2f9",
+                                  cursor: "pointer",
+                                  background: "#ffffff",
+                                }}
+                              >
+                                <div style={{ display: "flex", alignItems: "center", gap: 12, minWidth: 0 }}>
+                                  <span
+                                    className="fd-avatar-circle"
+                                    style={{ background: avatarPalette[idx % avatarPalette.length], width: 38, height: 38, fontSize: 12 }}
+                                  >
+                                    {getInitials(displayName)}
+                                  </span>
+                                  <div style={{ minWidth: 0 }}>
+                                    <div style={{ fontSize: 14, fontWeight: 500, color: "#1c2d41", display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+                                      <span>{displayName}</span>
+                                      {priorityTab === "HOT" && (
+                                        <span className="fd-badge-pill success">
+                                          {item.previewViews} {item.previewViews === 1 ? "clique" : "cliques"} {lastClick ? `(${lastClick})` : ""}
+                                        </span>
+                                      )}
+                                      {priorityTab === "HUMAN" && item.aiPausedAt && (
+                                        <span className="fd-badge-pill warning">IA pausada</span>
+                                      )}
+                                      {priorityTab === "FOLLOWUP" && fu.due && (
+                                        <span className="fd-badge-pill warning">
+                                          {fu.daysSinceSent} dias sem resposta
+                                        </span>
+                                      )}
+                                    </div>
+                                    <div style={{ fontSize: 12, color: "#7c8798", marginTop: 2, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                                      {priorityTab === "HUMAN" && item.messages?.[0]?.body
+                                        ? `${lastMsgTime ? `${lastMsgTime}: ` : ""}${item.messages[0].body}`
+                                        : extractRegionLabel(item.address, item.source)}
+                                    </div>
+                                  </div>
+                                </div>
+
+                                <button
+                                  type="button"
+                                  className="fd-btn fd-btn-sm fd-btn-primary fd-btn-rounded"
+                                  onClick={e => {
+                                    e.stopPropagation();
+                                    openConversation(item.id);
+                                  }}
+                                >
+                                  {priorityTab === "HUMAN" ? "Responder" : priorityTab === "FOLLOWUP" ? "Retornar" : "Abrir"}
+                                </button>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      );
+                    })()}
                   </div>
                 </div>
 
-                {/* Recent Activity Timeline */}
+                {/* Funil Real e Cidades Reais */}
                 <div className="fd-card">
                   <div className="fd-card-body">
-                    <h4 className="fd-card-title" style={{ marginBottom: 22 }}>Atividade Recente</h4>
+                    <h4 className="fd-card-title" style={{ marginBottom: 18 }}>Funil Real</h4>
 
-                    <div>
-                      <div className="fd-activity-line">
-                        <span className="fd-btn-circle fd-activity-circle" style={{ background: "#01caf1" }}>
-                          <Eye size={18} />
-                        </span>
-                        <h5 style={{ fontSize: 15, fontWeight: 500, color: "#1c2d41", margin: "0 0 4px" }}>
-                          Rastreio /v/slug ativo
-                        </h5>
-                        <p style={{ fontSize: 13, color: "#7c8798", margin: "0 0 4px" }}>
-                          {totalPreviewViews > 0
-                            ? `${totalPreviewViews} aberturas humanas contabilizadas em ${viewedLeadsCount} empresas.`
-                            : "Cole a URL da prévia manual no lead para gerar seu link rastreado."}
-                        </p>
-                        <span style={{ fontSize: 12, color: "#b8c3d5" }}>Em tempo real</span>
-                      </div>
+                    <div style={{ display: "flex", flexDirection: "column", gap: 14, marginBottom: 24 }}>
+                      {funnelSteps.map(step => {
+                        const pct = totalLeads > 0 ? Math.round((step.count / totalLeads) * 100) : 0;
+                        return (
+                          <div key={step.label}>
+                            <div style={{ display: "flex", justifyContent: "space-between", fontSize: 13, marginBottom: 5 }}>
+                              <span style={{ color: "#4f5467" }}>{step.label}</span>
+                              <span style={{ color: "#1c2d41", fontWeight: 500 }}>
+                                {step.count} ({pct}%)
+                              </span>
+                            </div>
+                            <div className="fd-progress">
+                              <div className="fd-progress-bar" style={{ width: `${pct}%`, background: step.color }} />
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
 
-                      <div className="fd-activity-line">
-                        <span className="fd-btn-circle fd-activity-circle" style={{ background: "#ff4f70" }}>
-                          <MessageSquare size={18} />
-                        </span>
-                        <h5 style={{ fontSize: 15, fontWeight: 500, color: "#1c2d41", margin: "0 0 4px" }}>
-                          Cadência de Follow up
-                        </h5>
-                        <p style={{ fontSize: 13, color: "#7c8798", margin: "0 0 4px" }}>
-                          {followUpCount > 0
-                            ? `${followUpCount} empresas enviadas aguardando toque de 2 ou 5 dias.`
-                            : "Nenhum follow up pendente no momento."}
-                        </p>
-                        <span style={{ fontSize: 12, color: "#b8c3d5" }}>Regras 2d e 5d</span>
+                    <div style={{ borderTop: "1px solid #edf2f9", paddingTop: 16 }}>
+                      <div style={{ fontSize: 13, fontWeight: 500, color: "#1c2d41", marginBottom: 10 }}>
+                        Principais Cidades na Base
                       </div>
-
-                      <div className="fd-activity-line">
-                        <span className="fd-btn-circle fd-activity-circle" style={{ background: "#5f76e8" }}>
-                          <Bell size={18} />
-                        </span>
-                        <h5 style={{ fontSize: 15, fontWeight: 500, color: "#1c2d41", margin: "0 0 4px" }}>
-                          KeepAlive Evolution API
-                        </h5>
-                        <p style={{ fontSize: 13, color: "#7c8798", margin: "0 0 6px" }}>
-                          Monitoramento de 60 segundos ativo no Render para manter sessões sempre prontas.
-                        </p>
-                        <button
-                          type="button"
-                          onClick={() => navigateView("campaigns")}
-                          style={{
-                            fontSize: 13,
-                            color: "#01caf1",
-                            border: 0,
-                            borderBottom: "1px solid #01caf1",
-                            padding: "0 0 2px",
-                            background: "transparent",
-                            cursor: "pointer",
-                          }}
-                        >
-                          Gerenciar buscas no Maps
-                        </button>
-                      </div>
+                      {realCities.length === 0 ? (
+                        <div style={{ fontSize: 12, color: "#7c8798" }}>
+                          Nenhuma empresa cadastrada ainda. Use Buscar no Maps para captar empresas reais.
+                        </div>
+                      ) : (
+                        <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                          {realCities.map(city => (
+                            <div key={city.label} style={{ display: "flex", justifyContent: "space-between", fontSize: 13 }}>
+                              <span style={{ color: "#7c8798" }}>{city.label}</span>
+                              <span style={{ color: "#1c2d41", fontWeight: 500 }}>
+                                {city.count} ({city.pct}%)
+                              </span>
+                            </div>
+                          ))}
+                        </div>
+                      )}
                     </div>
                   </div>
                 </div>
@@ -1256,21 +1245,26 @@ export default function Home() {
               <div className="fd-card">
                 <div className="fd-card-body">
                   <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 14, marginBottom: 18 }}>
-                    <h4 className="fd-card-title" style={{ margin: 0 }}>Pipeline de Empresas (Locadoras B2B)</h4>
+                    <h4 className="fd-card-title" style={{ margin: 0 }}>
+                      Empresas ({filtered.length})
+                    </h4>
 
                     <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
                       {[
-                        { id: "ALL", label: "Todos" },
-                        { id: "GOLD", label: "Ouro" },
-                        { id: "DEMO", label: "Prévia" },
-                        { id: "SENT", label: "Enviados" },
-                        { id: "FOLLOWUP", label: `Follow up${followUpCount ? ` (${followUpCount})` : ""}` },
-                        { id: "REPLIED", label: "Conversa" },
-                        { id: "WON", label: "Fechados" },
+                        { id: "ALL", label: "Todas" },
+                        { id: "GOLD", label: "Sem site" },
+                        { id: "DEMO", label: "Prévia pronta" },
+                        { id: "SENT", label: "Enviadas" },
+                        { id: "FOLLOWUP", label: `Retorno 2d e 5d${followUpCount ? ` (${followUpCount})` : ""}` },
+                        { id: "REPLIED", label: "Em conversa" },
+                        { id: "WON", label: "Fechadas" },
                       ].map(st => (
                         <button
                           key={st.id}
-                          onClick={() => setStageFilter(st.id)}
+                          onClick={() => {
+                            setStageFilter(st.id);
+                            setVisibleCount(25);
+                          }}
                           className={`fd-btn fd-btn-sm fd-btn-rounded ${stageFilter === st.id ? "fd-btn-primary" : ""}`}
                         >
                           {st.label}
@@ -1283,11 +1277,11 @@ export default function Home() {
                     <table className="fd-table">
                       <thead>
                         <tr>
-                          <th>Empresa e Contato</th>
-                          <th>Site e Maps</th>
+                          <th>Empresa e Cidade</th>
+                          <th>Site e Avaliação</th>
                           <th>WhatsApp</th>
                           <th style={{ textAlign: "center" }}>Status</th>
-                          <th style={{ textAlign: "center" }}>Views</th>
+                          <th style={{ textAlign: "center" }}>Cliques</th>
                           <th>Etapa</th>
                           <th style={{ textAlign: "right" }}>Ação</th>
                         </tr>
@@ -1296,12 +1290,12 @@ export default function Home() {
                         {filtered.length === 0 ? (
                           <tr>
                             <td colSpan={7} style={{ textAlign: "center", padding: "38px 16px", color: "#7c8798" }}>
-                              Nenhum lead encontrado neste filtro. Cadastre em <strong>Novo Lead</strong> ou configure uma busca no Maps.
+                              Nenhuma empresa encontrada neste filtro. Cadastre em <strong>Nova Empresa</strong> ou busque no Google Maps.
                             </td>
                           </tr>
                         ) : (
-                          filtered.slice(0, activeView === "pipeline" ? 100 : 20).map((l, idx) => {
-                            const conf = statusConfig[l.status] || { label: l.status, color: "#b8c3d5" };
+                          filtered.slice(0, visibleCount).map((l, idx) => {
+                            const conf = statusConfig[l.status] || { label: l.status, shortLabel: l.status, color: "#b8c3d5" };
                             const gold = getLeadGoldScore(l);
                             const followUp = getFollowUpStage(l);
                             const realSite = hasRealWebsite(l.website);
@@ -1318,8 +1312,9 @@ export default function Home() {
                                     <div>
                                       <div style={{ fontSize: 15, fontWeight: 500, color: "#1c2d41", display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
                                         <span>{displayName}</span>
-                                        {gold.isGold && <span className="fd-badge-pill warning">Ouro</span>}
+                                        {gold.isGold && <span className="fd-badge-pill warning">Destaque</span>}
                                         {l.previewUrl && <span className="fd-badge-pill primary">Prévia</span>}
+                                        {l.aiPausedAt && <span className="fd-badge-pill warning">IA pausada</span>}
                                       </div>
                                       <span style={{ fontSize: 13, color: "#7c8798" }}>{l.address || l.category || l.name}</span>
                                     </div>
@@ -1344,10 +1339,10 @@ export default function Home() {
                                 </td>
                                 <td>
                                   <div style={{ display: "flex", flexDirection: "column", gap: 4, alignItems: "flex-start" }}>
-                                    <span style={{ fontSize: 13, fontWeight: 500, color: "#1c2d41" }}>{conf.label}</span>
+                                    <span style={{ fontSize: 13, fontWeight: 500, color: "#1c2d41" }}>{conf.shortLabel}</span>
                                     {followUp.due && (
                                       <span className="fd-badge-pill warning">
-                                        Follow up {followUp.due === "DAY_5" ? "5d" : "2d"}
+                                        Retorno {followUp.due === "DAY_5" ? "5d" : "2d"}
                                       </span>
                                     )}
                                   </div>
@@ -1370,6 +1365,18 @@ export default function Home() {
                       </tbody>
                     </table>
                   </div>
+
+                  {filtered.length > visibleCount && (
+                    <div style={{ textAlign: "center", marginTop: 18 }}>
+                      <button
+                        type="button"
+                        className="fd-btn fd-btn-rounded"
+                        onClick={() => setVisibleCount(prev => prev + 25)}
+                      >
+                        Mostrar mais empresas ({filtered.length - visibleCount} restantes)
+                      </button>
+                    </div>
+                  )}
                 </div>
               </div>
           )}
@@ -1384,14 +1391,15 @@ export default function Home() {
                   </div>
                   <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
                     {[
-                      { id: "ALL", label: "Todos" },
-                      { id: "REPLIED", label: "Respondeu" },
-                      { id: "SENT", label: "Enviados" },
+                      { id: "ALL", label: "Todas" },
+                      { id: "WAIT_HUMAN", label: `Sua vez (${waitingHumanLeads.length})` },
+                      { id: "REPLIED", label: "Responderam" },
+                      { id: "SENT", label: "Enviadas" },
                     ].map(f => (
                       <button
                         key={f.id}
                         type="button"
-                        onClick={() => setChatFilter(f.id as "ALL" | "REPLIED" | "SENT")}
+                        onClick={() => setChatFilter(f.id as "ALL" | "WAIT_HUMAN" | "REPLIED" | "SENT")}
                         className={`fd-btn fd-btn-sm fd-btn-rounded ${chatFilter === f.id ? "fd-btn-primary" : ""}`}
                       >
                         {f.label}
@@ -1403,12 +1411,12 @@ export default function Home() {
                 <div style={{ flex: 1, overflowY: "auto" }}>
                   {chatContacts.length === 0 ? (
                     <div style={{ padding: 28, textAlign: "center", fontSize: 13, color: "#7c8798" }}>
-                      Nenhuma empresa encontrada neste filtro.
+                      Nenhuma conversa encontrada neste filtro.
                     </div>
                   ) : (
                     chatContacts.map((l, idx) => {
                       const displayName = l.company || l.name;
-                      const conf = statusConfig[l.status] || { label: l.status, color: "#b8c3d5" };
+                      const conf = statusConfig[l.status] || { label: l.status, shortLabel: l.status, color: "#b8c3d5" };
                       const lastMsg = l.messages?.[0]?.body;
                       return (
                         <button
@@ -1451,11 +1459,16 @@ export default function Home() {
                             >
                               {lastMsg || l.phone}
                             </div>
-                            <div style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 4 }}>
-                              <span style={{ fontSize: 11, color: "#7c8798" }}>{conf.label}</span>
+                            <div style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 4, flexWrap: "wrap" }}>
+                              <span style={{ fontSize: 11, color: "#7c8798" }}>{conf.shortLabel}</span>
+                              {l.aiPausedAt && (
+                                <span className="fd-badge-pill warning" style={{ fontSize: 10, padding: "1px 6px" }}>
+                                  Sua vez
+                                </span>
+                              )}
                               {(l.previewViews ?? 0) > 0 && (
                                 <span className="fd-badge-pill primary" style={{ fontSize: 10, padding: "1px 6px" }}>
-                                  {l.previewViews} views
+                                  {l.previewViews} cliques
                                 </span>
                               )}
                             </div>
@@ -1479,9 +1492,9 @@ export default function Home() {
             <div className="fd-card">
               <div className="fd-card-body">
                 <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 20 }}>
-                  <h4 className="fd-card-title" style={{ margin: 0 }}>Números Bloqueados e Opt out</h4>
+                  <h4 className="fd-card-title" style={{ margin: 0 }}>Contatos Bloqueados</h4>
                   <button className="fd-btn fd-btn-primary fd-btn-rounded fd-btn-sm" onClick={() => setShowAddSuppressionModal(true)}>
-                    <Plus size={14} /> Adicionar Bloqueio
+                    <Plus size={14} /> Bloquear Número
                   </button>
                 </div>
 
@@ -1499,7 +1512,7 @@ export default function Home() {
                       {suppressions.length === 0 ? (
                         <tr>
                           <td colSpan={4} style={{ textAlign: "center", padding: "40px 16px", color: "#7c8798" }}>
-                            Nenhum telefone na lista de supressão.
+                            Nenhum número bloqueado no momento.
                           </td>
                         </tr>
                       ) : (
@@ -1510,7 +1523,7 @@ export default function Home() {
                             <td>{new Date(s.createdAt).toLocaleDateString("pt-BR")}</td>
                             <td style={{ textAlign: "right" }}>
                               <button className="fd-btn fd-btn-sm fd-btn-rounded" onClick={() => unblockPhone(s.phone)}>
-                                Liberar
+                                Desbloquear
                               </button>
                             </td>
                           </tr>
@@ -1525,7 +1538,7 @@ export default function Home() {
         </div>
 
         <footer className="fd-footer">
-          Prospecta WA para Prospecção B2B de Alta Conversão.
+          Prospecta WA para Prospecção Comercial no WhatsApp.
         </footer>
       </div>
 
@@ -1543,14 +1556,14 @@ export default function Home() {
         <div className="fd-modal-backdrop" onClick={() => setShowAddModal(false)}>
           <div className="fd-modal" onClick={e => e.stopPropagation()}>
             <div style={{ padding: "18px 24px", borderBottom: "1px solid #edf2f9", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-              <h3 style={{ fontSize: 18, fontWeight: 500, color: "#1c2d41", margin: 0 }}>Cadastrar Lead Sniper</h3>
+              <h3 style={{ fontSize: 18, fontWeight: 500, color: "#1c2d41", margin: 0 }}>Cadastrar Empresa</h3>
               <button onClick={() => setShowAddModal(false)} className="fd-btn fd-btn-sm" style={{ padding: "0 8px" }}>
                 <X size={15} />
               </button>
             </div>
             <form onSubmit={addLead} style={{ padding: 24, display: "flex", flexDirection: "column", gap: 14 }}>
               <div>
-                <label style={{ display: "block", fontSize: 13, fontWeight: 500, color: "#1c2d41", marginBottom: 4 }}>Nome da Locadora ou Empresa</label>
+                <label style={{ display: "block", fontSize: 13, fontWeight: 500, color: "#1c2d41", marginBottom: 4 }}>Nome da Empresa</label>
                 <input className="fd-input" value={form.company} onChange={e => setForm({ ...form, company: e.target.value })} placeholder="Ex.: Locadora Forte Equipamentos" />
               </div>
 
@@ -1591,14 +1604,14 @@ export default function Home() {
               </div>
 
               <div>
-                <label style={{ display: "block", fontSize: 13, fontWeight: 500, color: "#1c2d41", marginBottom: 4 }}>URL da Prévia Manual (opcional)</label>
+                <label style={{ display: "block", fontSize: 13, fontWeight: 500, color: "#1c2d41", marginBottom: 4 }}>Link da Prévia (opcional)</label>
                 <input className="fd-input" value={form.previewUrl} onChange={e => setForm({ ...form, previewUrl: e.target.value })} placeholder="https://previa.seudominio.com" />
               </div>
 
               <div style={{ display: "flex", justifyContent: "flex-end", gap: 10, marginTop: 8 }}>
                 <button type="button" className="fd-btn fd-btn-rounded" onClick={() => setShowAddModal(false)}>Cancelar</button>
                 <button type="submit" className="fd-btn fd-btn-primary fd-btn-rounded" disabled={loading}>
-                  {loading ? "Salvando..." : "Salvar Lead"}
+                  {loading ? "Salvando..." : "Salvar Empresa"}
                 </button>
               </div>
             </form>
