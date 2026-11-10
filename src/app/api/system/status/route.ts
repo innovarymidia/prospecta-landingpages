@@ -3,6 +3,7 @@ import { z } from "zod";
 import { authorized, sameOrigin, unauthorized } from "@/lib/auth";
 import { checkEvolutionConnection } from "@/lib/evolution";
 import { getMessagingEnabled, setMessagingEnabled } from "@/lib/settings";
+import { resolveAppBaseUrl } from "@/lib/sniper";
 
 export async function GET(req: NextRequest) {
   if (!await authorized()) return unauthorized();
@@ -11,7 +12,7 @@ export async function GET(req: NextRequest) {
     checkEvolutionConnection(),
     getMessagingEnabled(),
   ]);
-  const publicAppUrl = (process.env.APP_URL || req.nextUrl.origin || "").trim().replace(/\/+$/, "");
+  const publicAppUrl = resolveAppBaseUrl(req.nextUrl.origin);
   const isLocalhostUrl = /localhost|127\.0\.0\.1/i.test(publicAppUrl);
 
   return NextResponse.json({

@@ -68,6 +68,34 @@ export function generatePreviewSlug(companyOrName: string, idSuffix = ""): strin
 }
 
 /**
+ * Resolve a URL pública base priorizando APP_URL, depois o domínio de produção da Vercel
+ * e por fim a origem da requisição HTTP.
+ */
+export function resolveAppBaseUrl(
+  requestOrigin?: string | null,
+  envAppUrl = process.env.APP_URL,
+  vercelProductionUrl = process.env.VERCEL_PROJECT_PRODUCTION_URL
+): string {
+  const normalizedVercel = vercelProductionUrl?.trim()
+    ? (/^https?:\/\//i.test(vercelProductionUrl.trim()) ? vercelProductionUrl.trim() : `https://${vercelProductionUrl.trim()}`)
+    : "";
+
+  for (const candidate of [envAppUrl, normalizedVercel, requestOrigin]) {
+    const clean = (candidate || "").trim().replace(/\/+$/, "");
+    if (!clean) continue;
+    try {
+      const parsed = new URL(clean);
+      if (parsed.protocol === "https:" || parsed.protocol === "http:") {
+        return parsed.origin;
+      }
+    } catch {
+      continue;
+    }
+  }
+  return "";
+}
+
+/**
  * Monta a URL completa de rastreio /v/[slug].
  */
 export function buildTrackedPreviewUrl(slug: string | null | undefined, baseUrl?: string): string | null {

@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { authorized, unauthorized } from "@/lib/auth";
 import { generateInitialApproach } from "@/lib/ai";
-import { buildTrackedPreviewUrl } from "@/lib/sniper";
+import { buildTrackedPreviewUrl, resolveAppBaseUrl } from "@/lib/sniper";
 
 export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   if (!await authorized()) return unauthorized();
@@ -10,7 +10,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   const lead = await db.lead.findUnique({ where: { id } });
   if (!lead) return NextResponse.json({ error: "Lead não encontrado" }, { status: 404 });
 
-  const baseUrl = process.env.APP_URL || req.nextUrl.origin;
+  const baseUrl = resolveAppBaseUrl(req.nextUrl.origin);
   const trackedPreviewUrl = lead.previewUrl
     ? buildTrackedPreviewUrl(lead.previewSlug, baseUrl) || lead.previewUrl
     : null;

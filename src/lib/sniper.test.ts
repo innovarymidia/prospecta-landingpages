@@ -15,6 +15,7 @@ import {
   isValidExternalHttpUrl,
   isValidPreviewImage,
   pickNextQueueCampaignId,
+  resolveAppBaseUrl,
   sortHotLeads,
 } from "./sniper.ts";
 
@@ -214,4 +215,20 @@ test("isBotOrPreviewUserAgent detects WhatsApp link preview crawlers", () => {
     isBotOrPreviewUserAgent("Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15"),
     false
   );
+});
+
+test("resolveAppBaseUrl prefers APP_URL, falls back to VERCEL_PROJECT_PRODUCTION_URL, then requestOrigin", () => {
+  assert.equal(
+    resolveAppBaseUrl("http://localhost:3000", "https://prospecta-landingpages.vercel.app/", "other.vercel.app"),
+    "https://prospecta-landingpages.vercel.app"
+  );
+  assert.equal(
+    resolveAppBaseUrl("http://localhost:3000", "", "prospecta-landingpages.vercel.app"),
+    "https://prospecta-landingpages.vercel.app"
+  );
+  assert.equal(
+    resolveAppBaseUrl("https://preview.local:3000/login", "", ""),
+    "https://preview.local:3000"
+  );
+  assert.equal(resolveAppBaseUrl("", "javascript:alert(1)", ""), "");
 });

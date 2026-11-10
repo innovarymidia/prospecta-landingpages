@@ -22,7 +22,7 @@
 }
 
 .login-bg-left {
-  background: url('/freedash/3.jpg') no-repeat center center;
+  background: #142233 url('/freedash/login-hero.jpg') no-repeat center center;
   background-size: cover;
   min-height: 360px;
 }

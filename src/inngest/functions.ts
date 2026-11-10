@@ -2,7 +2,7 @@ import { inngest } from "./client";
 import { db } from "@/lib/db";
 import { generateReply, transcribeAudio } from "@/lib/ai";
 import { getMediaBase64, sendMedia, sendText } from "@/lib/evolution";
-import { buildTrackedPreviewUrl, pickNextQueueCampaignId } from "@/lib/sniper";
+import { buildTrackedPreviewUrl, pickNextQueueCampaignId, resolveAppBaseUrl } from "@/lib/sniper";
 import { importSearchResults, pollSearch, submitSearch } from "@/lib/outscraper";
 import { getInboundBufferSeconds, isLeadBlocked, isOptOutMessage, shouldAiAutoReply } from "@/lib/safety";
 import { getMessagingEnabled } from "@/lib/settings";
@@ -141,7 +141,7 @@ export const processInbound = inngest.createFunction(
     if (!context || !messagingActive) return { skipped: true };
 
     const trackedLink = context.lead.previewUrl
-      ? buildTrackedPreviewUrl(context.lead.previewSlug, process.env.APP_URL) || context.lead.previewUrl
+      ? buildTrackedPreviewUrl(context.lead.previewSlug, resolveAppBaseUrl()) || context.lead.previewUrl
       : null;
     const contextParts = [
       context.lead.company,

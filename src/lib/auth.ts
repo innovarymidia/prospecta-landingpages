@@ -2,6 +2,7 @@ import { cookies } from "next/headers";
 import { NextRequest, NextResponse } from "next/server";
 import { jwtVerify } from "jose";
 import { isSameOrigin } from "./auth-helpers.ts";
+import { resolveAppBaseUrl } from "./sniper.ts";
 
 export const SESSION_COOKIE = "prospecta_session";
 
@@ -29,5 +30,5 @@ export function unauthorized() {
 export function sameOrigin(req: NextRequest) {
   const origin = req.headers.get("origin") || req.headers.get("referer");
   const host = req.headers.get("x-forwarded-host") || req.headers.get("host");
-  return isSameOrigin(origin, host, process.env.APP_URL, process.env.NODE_ENV !== "production");
+  return isSameOrigin(origin, host, resolveAppBaseUrl(), process.env.NODE_ENV !== "production");
 }
