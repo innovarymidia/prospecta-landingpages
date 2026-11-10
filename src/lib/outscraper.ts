@@ -15,6 +15,30 @@ function stringField(item: Place, ...keys: string[]) {
   for (const key of keys) if (typeof item[key] === "string" && item[key]) return (item[key] as string).trim();
   return "";
 }
+function numberField(item: Place, ...keys: string[]): number | null {
+  for (const key of keys) {
+    const val = item[key];
+    if (typeof val === "number" && Number.isFinite(val)) return val;
+    if (typeof val === "string" && val.trim()) {
+      const parsed = Number(val.replace(",", "."));
+      if (Number.isFinite(parsed)) return parsed;
+    }
+  }
+  return null;
+}
+function hoursField(item: Place): string | null {
+  const raw = item.working_hours;
+  if (!raw) return null;
+  if (typeof raw === "string") return raw.trim().slice(0, 200) || null;
+  if (typeof raw === "object" && !Array.isArray(raw)) {
+    const summary = Object.entries(raw as Record<string, unknown>)
+      .slice(0, 3)
+      .map(([day, val]) => `${day}: ${Array.isArray(val) ? val.join(", ") : String(val)}`)
+      .join(" · ");
+    return summary.slice(0, 200) || null;
+  }
+  return null;
+}
 function readResponse(body: unknown): { ready: boolean; failure: boolean; taskId: string; data: Place[] } {
   const value = (body && typeof body === "object" ? body : {}) as Record<string, unknown>;
   const taskId = String(value.id || "");
@@ -36,7 +60,7 @@ export async function submitSearch(campaign: SearchCampaign): Promise<Outscraper
   url.searchParams.set("totalLimit", String(Math.min(200, campaign.maxResults * campaign.searchTerms.length)));
   url.searchParams.set("dropDuplicates", "true");
   url.searchParams.set("async", "true");
-  url.searchParams.set("fields", "query,name,place_id,google_id,full_address,site,phone,type,category,business_status");
+  url.searchParams.set("fields", "query,name,place_id,google_id,full_address,site,phone,type,category,business_status,rating,reviews,working_hours");
   if (campaign.regionCode) url.searchParams.set("region", campaign.regionCode.toLowerCase());
   if (campaign.language) url.searchParams.set("language", campaign.language);
   const result = readResponse(await readJson(url.toString(), apiKey));
@@ -65,7 +89,11 @@ export async function importSearchResults(taskId: string, campaignId: string) {
     if (!name || phone.length < 9 || (status && status !== "OPERATIONAL")) return [];
     if (campaign.websiteTarget === "missing" && website) return [];
     if (campaign.websiteTarget === "present" && !website) return [];
-    return [{ name: name.slice(0, 180), phone, company: name.slice(0, 180), website: website || null, address: stringField(item, "full_address").slice(0, 300) || null, category: stringField(item, "type", "category").slice(0, 120) || null, providerId: placeId ? `outscraper:${placeId}`.slice(0, 190) : null, source: `Outscraper: ${stringField(item, "query")}`.slice(0, 190), status: "READY" as const }];
+    const rating = numberField(item, "rating");
+    const reviewsRaw = numberField(item, "reviews", "reviews_count");
+    const reviewsCount = reviewsRaw !== null ? Math.max(0, Math.round(reviewsRaw)) : null;
+    const hours = hoursField(item);
+    return [{ name: name.slice(0, 180), phone, company: name.slice(0, 180), website: website || null, address: stringField(item, "full_address").slice(0, 300) || null, category: stringField(item, "type", "category").slice(0, 120) || null, rating, reviewsCount, hours, providerId: placeId ? `outscraper:${placeId}`.slice(0, 190) : null, source: `Outscraper: ${stringField(item, "query")}`.slice(0, 190), status: "READY" as const }];
   });
   const uniqueCandidates = Array.from(new Map(candidates.map(item => [item.phone, item])).values());
   if (!uniqueCandidates.length) return { found: 0, added: 0 };

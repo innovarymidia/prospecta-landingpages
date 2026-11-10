@@ -12,6 +12,8 @@ datasource db {
 enum LeadStatus {
   NEW
   READY
+  BUILDING
+  DEMO_READY
   SENT
   REPLIED
   QUALIFIED
@@ -55,6 +57,14 @@ model Lead {
   website String?
   address String?
   category String?
+  rating Float?
+  reviewsCount Int?
+  hours String?
+  previewUrl String?
+  previewSlug String? @unique
+  previewImage String?
+  previewViews Int @default(0)
+  lastViewedAt DateTime?
   providerId String? @unique
   source String?
   notes String?
@@ -78,6 +88,7 @@ model Message {
   purpose MessagePurpose?
   status MessageStatus @default(QUEUED)
   body String
+  mediaUrl String?
   externalId String? @unique
   createdAt DateTime @default(now())
 

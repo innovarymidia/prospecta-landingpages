@@ -6,19 +6,33 @@ export interface LeadForPitch {
   website?: string | null;
   notes?: string | null;
   category?: string | null;
+  address?: string | null;
+  rating?: number | null;
+  reviewsCount?: number | null;
+  previewUrl?: string | null;
+  trackedPreviewUrl?: string | null;
 }
 
 export function buildFallbackApproach(lead: LeadForPitch): string {
   const firstName = lead.name.trim().split(" ")[0] || "olá";
   const companyName = lead.company?.trim() || "sua empresa";
+  const link = lead.trackedPreviewUrl || lead.previewUrl;
 
-  return `Oi, ${firstName}! Tudo bem?\nUma dúvida rápida sobre a ${companyName}: quem aí cuida da parte de captação de novos clientes/pacientes pelo WhatsApp? Seria você mesma ou teriam 5 minutos nesta semana para trocarmos uma ideia rápida?`;
+  if (link) {
+    const ratingSnippet =
+      typeof lead.rating === "number" && lead.rating >= 4.0
+        ? ` (vi que vocês têm nota ${lead.rating.toFixed(1)} no Google)`
+        : "";
+    return `Oi, tudo bem? É da ${companyName}?${ratingSnippet} Notei que vocês ainda não têm uma página própria focada em pedidos de orçamento no WhatsApp e tomei a liberdade de montar uma prévia real de como ficaria o site de vocês funcionando no celular: ${link}\n\nSe puder encaminhar para o responsável dar uma olhada sem compromisso, acredito que ajuda bastante a evitar equipamento parado e puxar cotações diretas no Google.`;
+  }
+
+  return `Oi, ${firstName}! Tudo bem?\nUma dúvida rápida sobre a ${companyName}: quem aí cuida da parte de captação de novos clientes/orçamentos pelo WhatsApp? Seria você mesma ou teriam 5 minutos nesta semana para trocarmos uma ideia rápida?`;
 }
 
 /**
- * Gera a mensagem de primeiro contato (Cold WhatsApp Outreach).
- * Foco: Quebra de padrão, baixo atrito, consciente de que o contato inicial
- * quase sempre é atendido pela secretária / recepcionista / atendente.
+ * Gera a primeira mensagem de abordagem (Modo Sniper com Prévia Pronta ou Fallback).
+ * Regra Sniper: Se houver link de prévia pronta, entrega o link diretamente sem pedir permissão antes,
+ * com tom humano, citando dados reais (nota/segmento) e facilitando o repasse pela recepção/atendimento.
  */
 export async function generateInitialApproach(lead: LeadForPitch): Promise<string> {
   const apiKey = process.env.GEMINI_API_KEY || process.env.GEMINI_WHATSAPP_API_KEY;
@@ -31,52 +45,53 @@ export async function generateInitialApproach(lead: LeadForPitch): Promise<strin
       model: process.env.GEMINI_MODEL || "gemini-2.5-flash",
     });
 
-    const businessName = process.env.BUSINESS_NAME || "Innovary";
     const company = lead.company?.trim() || lead.name.trim();
-    const firstName = lead.name.trim().split(" ")[0] || "";
+    const previewLink = lead.trackedPreviewUrl || lead.previewUrl || "";
+    const ratingInfo =
+      typeof lead.rating === "number"
+        ? `${lead.rating.toFixed(1)} estrelas (${lead.reviewsCount ?? 0} avaliações no Google Maps)`
+        : "não informada";
 
-    const prompt = `Você é um especialista em prospecção B2B de alta conversão pelo WhatsApp no Brasil.
-Seu objetivo é redigir a PRIMEIRA MENSAGEM de contato para o WhatsApp comercial da empresa "${company}".
+    const prompt = previewLink
+      ? `Você é um consultor B2B especialista em sites de alta conversão no Brasil (foco principal: locadoras de máquinas/equipamentos e empresas operacionais B2B).
+Sua missão é redigir a PRIMEIRA MENSAGEM DE WHATSAPP entregando DIRETAMENTE uma prévia de site que você acabou de construir manualmente para a empresa "${company}".
 
-CONTEXTO CRÍTICO DE PROSPECÇÃO:
-1. Este número quase NUNCA é o celular pessoal do dono/médico/advogado; quem atende é uma SECRETÁRIA, RECEPCIONISTA ou ATENDENTE comercial (o "gatekeeper").
-2. NUNCA envie textões, propostas prontas, preços de cara ou mensagens com cara de agência de marketing tradicional. Secretárias ignoram ou dizem "não temos interesse" para discursos de vendas longos.
-3. A mensagem precisa ser ULTRA CURTA (máximo 2 a 3 frases curtas), informal, respeitosa e natural, como se fosse um humano digitando rapidamente no celular.
-
-DADOS DO PROSPECT:
+DADOS REAIS DO PROSPECT:
 - Empresa: ${company}
-- Nome no cadastro: ${lead.name}
-- Segmento: ${lead.category || "Serviços"}
-- Site atual: ${lead.website || "não informado"}
-- Notas: ${lead.notes || "nenhuma"}
+- Segmento/Nicho: ${lead.category || "Locação de Máquinas e Equipamentos"}
+- Endereço/Cidade: ${lead.address || "não informado"}
+- Reputação no Google: ${ratingInfo}
+- Site anterior: ${lead.website || "Sem site próprio"}
+- Observações do operador: ${lead.notes || "nenhuma"}
+- LINK EXATO DA PRÉVIA PRONTA (INCLUA OBRIGATORIAMENTE): ${previewLink}
 
-ESTRATÉGIA DE ABORDAGEM (ESCOLHA A MAIS ADEQUADA AO CONTEXTO):
-Opção 1 (Direcionamento com Atendente - Altíssima Conversão):
-Cumprimento natural + pergunta sobre quem é o responsável pela captação de clientes/pacientes ou novos agendamentos na empresa.
-Exemplo: "Oi, bom dia! É da [Empresa]? Tudo bem? Uma dúvida rápida: com quem consigo falar sobre novos pacientes/clientes que chegam pelo site/WhatsApp? É por este número mesmo?"
-
-Opção 2 (Oportunidade Específica no Site/WhatsApp):
-Se o prospect tiver site informado: mencionar que notou que o site demora para abrir no celular ou que falta um botão direto para o WhatsApp comercial, e perguntar quem pode receber um aviso/print rápido.
-Exemplo: "Oi, tudo bem? Fui dar uma olhada na página de vocês pelo celular e notei um detalhe que pode estar fazendo vocês perderem orçamentos no WhatsApp. Com quem posso compartilhar isso por aqui?"
-
-INSTRUÇÕES OBRIGATÓRIAS:
-- Máximo de 2 a 3 linhas de WhatsApp.
-- Linguagem brasileira fluida, educada e coloquial (sem excesso de formalidade e sem emojis exagerados, use no máximo um "Oi, tudo bem?").
-- NUNCA mencione preços, termos técnicos como "infraestrutura Vercel", ou parágrafos de vendas na primeira mensagem. O objetivo é APENAS conseguir a primeira resposta da atendente ou do decisor.
-- Responda EXCLUSIVAMENTE com o texto da mensagem, sem aspas, sem introdução e sem explicações adicionais.`;
+ESTRATÉGIA OBRIGATÓRIA (MODO SNIPER - ENTREGA DIRETA):
+1. NÃO peça permissão ("posso mandar o link?"). Entregue o valor direto, porque o site já está pronto (e um print da página vai anexado junto com essa mensagem).
+2. Deixe claro que não é disparo genérico: cite algo específico do negócio (a reputação real no Google se >= 4.2, ou a cidade/nicho).
+3. Fale a língua prática do negócio (ex.: para locadoras/serviços B2B: aparecer para quem busca no Google, evitar equipamento/frota parada e receber cotação rápida no WhatsApp).
+4. Quem atende o WhatsApp comercial quase sempre é atendente/balcão/secretária: termine pedindo com simpatia para ela encaminhar ao dono/sócio/gerente dar uma olhada sem compromisso.
+5. NUNCA mencione preço (R$ 1.200) nem termos técnicos ("Vercel", "Next.js") na primeira mensagem.
+6. Curta e direta: 3 a 4 linhas fáceis de ler no celular, linguagem brasileira natural, sem cara de vendedor chato e sem excesso de emojis.
+7. Responda EXCLUSIVAMENTE com o texto pronto da mensagem (incluindo o link ${previewLink} sem alterações).`
+      : `Você é um especialista em prospecção B2B pelo WhatsApp no Brasil.
+Redija uma primeira mensagem ULTRA CURTA (2 a 3 frases) para o WhatsApp comercial da empresa "${company}" (${lead.category || "Serviços B2B"}).
+Lembre-se: quem atende normalmente é atendente/secretária. Seja humano, natural, sem textão, sem mencionar preços ou jargões técnicos, perguntando quem cuida da parte de novos orçamentos/site por lá.
+Responda EXCLUSIVAMENTE com o texto da mensagem.`;
 
     const result = await model.generateContent(prompt);
     const text = result.response.text().trim();
-    return text || buildFallbackApproach(lead);
+    if (!text) return buildFallbackApproach(lead);
+    if (previewLink && !text.includes(previewLink)) {
+      return `${text}\n\nLink da prévia: ${previewLink}`;
+    }
+    return text;
   } catch {
     return buildFallbackApproach(lead);
   }
 }
 
 /**
- * Conduz a conversa de forma persuasiva, empática e inteligente.
- * Identifica se está falando com secretária ou decisor e aplica técnicas
- * de persuasão (Chris Voss, Spin Selling) para avançar a negociação.
+ * Conduz a conversa após resposta do cliente ou secretária.
  */
 export async function generateReply(name: string, context: string, messages: string[]) {
   const apiKey = process.env.GEMINI_API_KEY || process.env.GEMINI_WHATSAPP_API_KEY;
@@ -88,43 +103,28 @@ export async function generateReply(name: string, context: string, messages: str
 
   const businessName = process.env.BUSINESS_NAME || "Innovary";
 
-  const systemInstruction = `Você é um consultor comercial de elite da empresa "${businessName}". Você conversa via WhatsApp com leads B2B em português do Brasil.
+  const systemInstruction = `Você é um consultor comercial da "${businessName}". Você conversa via WhatsApp com empresas B2B no Brasil (especialmente locadoras de máquinas, equipamentos, andaimes, geradores e serviços de alto ticket).
 
 O QUE VOCÊ OFERECE:
-- Criação de Landing Pages Profissionais de Altíssima Conversão para WhatsApp.
-- Carregamento instantâneo no celular (menos de 1 segundo), leve, moderna e responsiva.
-- Total flexibilidade: entregamos pronta no ar no domínio do cliente ou onde ele preferir hospedar.
-- Copywriting persuasivo voltado para fechamento de clientes de alto ticket (médicos, dentistas, clínicas estéticas, advogados, energia solar, reformas).
-- Investimento: Pagamento ÚNICO de R$ 1.200 (sem mensalidades presas, sem pegadinhas).
-- Diferencial real para o cliente: 1 único cliente ou paciente novo que a página trouxer já paga todo o investimento com lucro.
+- Landing Page / Catálogo Profissional focado em gerar pedidos de orçamento no WhatsApp pelo Google.
+- Carregamento instantâneo no celular, design artesanal sob medida (zero cara de template pronto).
+- Entregue pronta no domínio próprio do cliente ou onde ele preferir hospedar, sem dor de cabeça técnica.
+- Investimento: Pagamento ÚNICO de R$ 1.200 (sem mensalidade presa, sem pegadinha).
+- ROI óbvio para o cliente B2B: 1 única locação/contrato que a página puxar já paga o projeto com folga.
 
-MANUAL DE PERSUASÃO E CONDUÇÃO DA CONVERSA:
-1. IDENTIFIQUE QUEM ESTÁ FALANDO:
-   - Se for a SECRETÁRIA/ATENDENTE:
-     * Trate-a com muito carinho e empatia ("Sei como a sua rotina no atendimento é corrida!").
-     * Nunca tente vender para a secretária. Seu único objetivo é fazê-la encaminhar o contato do responsável/proprietário ou passar a mensagem para ele.
-     * Frase-chave: "Você saberia me dizer o WhatsApp ou e-mail de quem cuida dessa parte (o doutor ou o gestor)? Prometo ser super direto e rápido com ele para não tomar o tempo de vocês."
+COMO CONDUZIR A CONVERSA:
+1. SE FOR ATENDENTE / SECRETÁRIA:
+   - Seja cordial e agradeça pela atenção. Peça o WhatsApp ou e-mail direto do responsável/sócio, ou peça para encaminhar o link da prévia para ele avaliar em 1 minuto.
+2. SE FOR O DONO / GERENTE:
+   - Se ele gostou da prévia ou perguntou preço: explique que a versão completa com fotos reais do pátio/catálogo e publicada no domínio oficial sai por R$ 1.200 pagamento único (sem mensalidade), e ele não precisa perder tempo montando texto ou mexendo em servidor.
+   - Use perguntas curtas de baixo atrito (ex.: "Quer que eu te explique em 2 minutos como colocamos no domínio oficial de vocês?").
+   - Se disser que "já temos site": responda sem confronto que viu o atual, mas que hoje ~80% dos compradores checam pelo celular e páginas antigas/lentas perdem cotações pro concorrente no Google.
+   - Se não tiver interesse: agradeça com elegância e encerre sem insistir.
 
-   - Se for o DECISOR / PROPRIETÁRIO:
-     * Seja direto e fale a língua de negócios: velocidade de carregamento, perda de clientes no celular, tráfego que vaza e conversão em agendamentos no WhatsApp.
-     * Use micro-compromissos (Chris Voss): "Seria um absurdo eu te mandar uma demonstração de 1 minuto em vídeo/link de como ficaria a página da sua clínica?"
-     * Mostre ROI: "Nosso projeto é de R$ 1.200 pagamento único. Com o ticket dos seus serviços, 1 único cliente novo já quita o site com lucro."
-
-2. TRATAMENTO DE OBJEÇÕES:
-   - Objeção "Já temos site":
-     * Resposta: "Com certeza, vi que vocês têm o site institucional! A questão é que no celular 70% das pessoas desistem se a página não carregar em 1 segundo com botão direto pro WhatsApp. A nossa Landing Page funciona como um funil focado puramente em gerar agendamentos. Posso te mostrar um comparativo rápido de 30 segundos?"
-   - Objeção "Não tenho interesse / Não queremos":
-     * Resposta: "Sem problemas, agradeço demais a atenção! Se no futuro vocês quiserem acelerar as captações pelo WhatsApp sem pagar mensalidade de agência, fico à disposição por aqui. Um abraço!"
-   - Objeção "Quanto custa?":
-     * Resposta: "Nosso projeto completo (design sob medida, textos persuasivos e carregamento instantâneo no celular) tem taxa única de R$ 1.200, sem mensalidades. Entregamos pronta no ar no seu domínio ou onde preferir hospedar. Geralmente 1 paciente/cliente já cobre o valor. Quer ver um exemplo do seu segmento?"
-   - Objeção "Manda apresentação por e-mail":
-     * Resposta: "Mando agora mesmo! Qual é o melhor e-mail? E qual é o nome do responsável para eu colocar no assunto?"
-
-3. DIRETRIZES DE ESTILO:
-   - NUNCA envie blocos de texto grandes. Máximo de 2 a 4 linhas por mensagem.
-   - Linguagem natural de WhatsApp (usar quebras de linha leves, sem juridiquês e sem parecer robô).
-   - Termine SEMPRE com uma pergunta curta, fácil de responder (pergunta de baixo atrito).
-   - Responda apenas com a mensagem a ser enviada no WhatsApp.`;
+DIRETRIZES DE ESTILO:
+- Máximo de 2 a 4 linhas por mensagem. Linguagem natural de WhatsApp brasileiro.
+- NUNCA invente funcionalidades não pedidas nem mencione nomes de plataformas de hospedagem internas.
+- Responda apenas com a mensagem final.`;
 
   const conversationHistory = `Contexto do lead: ${context || "Nenhum dado extra"}
 Nome cadastrado: ${name}
@@ -142,6 +142,6 @@ Responda agora com a melhor mensagem para dar seguimento à conversa de forma pe
     return result.response.text().trim();
   } catch (err) {
     console.warn("[AI] Falha na chamada Gemini em generateReply:", err instanceof Error ? err.message : err);
-    return `Olá! Obrigado pelo retorno. Nosso projeto é taxa única de R$ 1.200 (sem mensalidades), com design sob medida focado em WhatsApp e entregue pronto no seu domínio ou onde preferir. Teria 3 minutinhos para eu te mostrar um modelo do seu segmento?`;
+    return `Obrigado pelo retorno! Para colocarmos a página personalizada no ar no domínio de vocês (com catálogo focado em orçamento no WhatsApp e carregamento instantâneo), o valor é único de R$ 1.200, sem mensalidades. Quer ajustar algum detalhe da prévia para colocarmos no ar?`;
   }
 }

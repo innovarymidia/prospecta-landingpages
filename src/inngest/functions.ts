@@ -1,7 +1,8 @@
 import { inngest } from "./client";
 import { db } from "@/lib/db";
 import { generateReply } from "@/lib/ai";
-import { sendText } from "@/lib/evolution";
+import { sendMedia, sendText } from "@/lib/evolution";
+import { buildTrackedPreviewUrl } from "@/lib/sniper";
 import { importSearchResults, pollSearch, submitSearch } from "@/lib/outscraper";
 import { isLeadBlocked } from "@/lib/safety";
 
@@ -22,11 +23,22 @@ export const processInbound = inngest.createFunction(
       if (suppression) return null;
       const latestInbound = lead.messages.find(m => m.direction === "INBOUND");
       if (!latestInbound || latestInbound.id !== messageId) return null;
-      return { lead: { id: lead.id, name: lead.name, phone: lead.phone, company: lead.company, website: lead.website, notes: lead.notes }, incoming: lead.messages.filter(m => m.direction === "INBOUND").map(m => m.body).reverse() };
+      return { lead: { id: lead.id, name: lead.name, phone: lead.phone, company: lead.company, website: lead.website, rating: lead.rating, reviewsCount: lead.reviewsCount, previewUrl: lead.previewUrl, previewSlug: lead.previewSlug, notes: lead.notes }, incoming: lead.messages.filter(m => m.direction === "INBOUND").map(m => m.body).reverse() };
     });
     if (!context || process.env.AUTOMATION_ENABLED !== "true") return { skipped: true };
 
-    const answer = await step.run("draft-contextual-reply", () => generateReply(context.lead.name, [context.lead.company, context.lead.website, context.lead.notes].filter(Boolean).join(" | "), context.incoming));
+    const trackedLink = context.lead.previewUrl
+      ? buildTrackedPreviewUrl(context.lead.previewSlug, process.env.APP_URL) || context.lead.previewUrl
+      : null;
+    const contextParts = [
+      context.lead.company,
+      context.lead.website ? `Site atual: ${context.lead.website}` : "Sem site próprio",
+      typeof context.lead.rating === "number" ? `Nota Google: ${context.lead.rating.toFixed(1)} (${context.lead.reviewsCount ?? 0} avaliações)` : null,
+      trackedLink ? `Link da prévia já enviada: ${trackedLink}` : null,
+      context.lead.notes,
+    ].filter(Boolean).join(" | ");
+
+    const answer = await step.run("draft-contextual-reply", () => generateReply(context.lead.name, contextParts, context.incoming));
     const message = await step.run("save-reply-draft", async () => {
       const lead = await db.lead.findUnique({ where: { id: leadId } });
       if (!lead || isLeadBlocked(lead)) return null;
@@ -58,16 +70,19 @@ export const sendOutbound = inngest.createFunction(
       if (lead.optOutAt || ["OPTED_OUT", "BLOCKED"].includes(lead.status) || await db.suppression.findUnique({ where: { phone: lead.phone } })) return null;
       if (message.purpose === "REPLY" && !lead.initialSentAt) return null;
       if (process.env.AUTOMATION_ENABLED !== "true") return null;
-      return { phone: lead.phone, body: message.body, purpose: message.purpose, status: message.status };
+      return { phone: lead.phone, body: message.body, mediaUrl: message.mediaUrl, purpose: message.purpose, status: message.status };
     });
     if (!payload) return { skipped: true };
-    const sent = await step.run("send-through-evolution", () => sendText(payload.phone, payload.body));
+    const sent = await step.run("send-through-evolution", () =>
+      payload.mediaUrl ? sendMedia(payload.phone, payload.body, payload.mediaUrl) : sendText(payload.phone, payload.body)
+    );
     await step.run("record-confirmed-send", async () => {
       const lead = await db.lead.findUnique({ where: { id: leadId } });
       if (!lead || lead.optOutAt || ["OPTED_OUT", "BLOCKED"].includes(lead.status)) return;
+      const shouldAdvanceToSent = payload.purpose === "INITIAL" && ["NEW", "READY", "BUILDING", "DEMO_READY"].includes(lead.status);
       await db.$transaction([
         db.message.update({ where: { id: messageId }, data: { status: "SENT", externalId: sent.key?.id } }),
-        db.lead.update({ where: { id: leadId }, data: { initialSentAt: payload.purpose === "INITIAL" ? (lead.initialSentAt || new Date()) : lead.initialSentAt, lastMessageAt: new Date(), status: payload.purpose === "INITIAL" && lead.status === "READY" ? "SENT" : lead.status } }),
+        db.lead.update({ where: { id: leadId }, data: { initialSentAt: payload.purpose === "INITIAL" ? (lead.initialSentAt || new Date()) : lead.initialSentAt, lastMessageAt: new Date(), status: shouldAdvanceToSent ? "SENT" : lead.status } }),
       ]);
     });
     return { sent: true };

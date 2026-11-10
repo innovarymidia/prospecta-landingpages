@@ -6,7 +6,7 @@ const openPaths = new Set(["/login", "/api/auth/login", "/api/auth/logout", "/ap
 export async function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl;
   const cleanPath = pathname.replace(/\/+$/, "") || "/";
-  if (openPaths.has(cleanPath) || pathname.startsWith("/_next/") || pathname === "/favicon.ico") {
+  if (openPaths.has(cleanPath) || pathname.startsWith("/v/") || pathname.startsWith("/_next/") || pathname === "/favicon.ico") {
     return NextResponse.next();
   }
 

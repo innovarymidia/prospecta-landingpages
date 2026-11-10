@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { authorized, unauthorized, sameOrigin } from "@/lib/auth";
 import { inngest } from "@/inngest/client";
+import { isValidPreviewImage } from "@/lib/sniper";
 
 export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   if (!await authorized()) return unauthorized();
@@ -28,6 +29,15 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     return NextResponse.json({ error: "Texto da mensagem deve ter entre 1 e 1200 caracteres" }, { status: 400 });
   }
 
+  const includePreviewImage = Boolean(body?.includePreviewImage);
+  const candidateMedia = typeof body?.mediaUrl === "string" && body.mediaUrl.trim()
+    ? body.mediaUrl.trim()
+    : (includePreviewImage ? lead.previewImage : null);
+
+  if (candidateMedia && !isValidPreviewImage(candidateMedia)) {
+    return NextResponse.json({ error: "Imagem anexada inválida ou excede o tamanho suportado" }, { status: 400 });
+  }
+
   const purpose = lead.initialSentAt ? "REPLY" : "INITIAL";
   const msg = await db.message.create({
     data: {
@@ -35,6 +45,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       direction: "OUTBOUND",
       purpose,
       body: text,
+      mediaUrl: candidateMedia || null,
       status: "QUEUED",
     },
   });
@@ -45,5 +56,5 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     data: { leadId: id, messageId: msg.id },
   });
 
-  return NextResponse.json({ queued: true, messageId: msg.id, purpose }, { status: 202 });
+  return NextResponse.json({ queued: true, messageId: msg.id, purpose, hasMedia: Boolean(candidateMedia) }, { status: 202 });
 }
